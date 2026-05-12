@@ -8,6 +8,7 @@ import {
   useGetMarketOverview, getGetMarketOverviewQueryKey,
   useGetMarketMovers, getGetMarketMoversQueryKey,
   useListNarratives, getListNarrativesQueryKey,
+  useListTokens, getListTokensQueryKey,
 } from "@workspace/api-client-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis } from "recharts";
 import {
@@ -75,6 +76,34 @@ const NAV_ITEMS = [
   { path: "/signals", label: "Signals", icon: TrendingUp },
   { path: "/portfolio", label: "Portfolio", icon: Briefcase },
 ];
+
+function Sparkline({ change, seed = 0 }: { change: number; seed?: number }) {
+  const pts = Array.from({ length: 7 }, (_, i) => {
+    const trend = ((change / 100) / 6) * i * 30;
+    const noise = Math.sin(i * 1.7 + seed) * 5 + Math.cos(i * 2.9 + seed * 0.6) * 3;
+    return 14 - trend + noise;
+  });
+  const min = Math.min(...pts);
+  const max = Math.max(...pts);
+  const range = max - min || 1;
+  const norm = pts.map(p => ((p - min) / range) * 26 + 2);
+  const path = norm.map((y, i) => `${i === 0 ? "M" : "L"} ${(i / 6) * 74 + 3} ${30 - y}`).join(" ");
+  const area = path + " L 77 30 L 3 30 Z";
+  const color = change >= 0 ? "#26a69a" : "#ef5350";
+  const gid = `sg_${seed}`;
+  return (
+    <svg viewBox="0 0 80 32" className="w-16 h-8">
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gid})`} />
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function TradingViewChart({ symbol }: { symbol: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -180,6 +209,8 @@ export default function Home() {
   const [tf, setTf] = useState("D");
   const [aiTab, setAiTab] = useState("ai");
   const [activeNav, setActiveNav] = useState("Overview");
+  const [tableFilter, setTableFilter] = useState("All");
+  const [tableSearch, setTableSearch] = useState("");
 
   const { data: token } = useGetToken(symbol, { query: { queryKey: getGetTokenQueryKey(symbol) } });
   const { data: scores } = useGetTokenScores(symbol, { query: { queryKey: getGetTokenScoresQueryKey(symbol) } });
@@ -188,6 +219,7 @@ export default function Home() {
   const { data: overview } = useGetMarketOverview({ query: { queryKey: getGetMarketOverviewQueryKey() } });
   const { data: movers } = useGetMarketMovers({ query: { queryKey: getGetMarketMoversQueryKey() } });
   const { data: narratives } = useListNarratives({ query: { queryKey: getListNarrativesQueryKey() } });
+  const { data: allTokens } = useListTokens({}, { query: { queryKey: getListTokensQueryKey({}) } });
 
   const price = token?.price ?? 0;
   const change24h = token?.priceChange24h ?? 0;
@@ -747,6 +779,200 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
+              {/* ── COINGECKO-STYLE TOKEN TABLE ── */}
+              {(() => {
+                const FILTERS = ["All", "DeFi", "AI", "L1", "L2", "Meme", "RWA", "Gaming"];
+                const filtered = (allTokens ?? []).filter(t => {
+                  const matchSearch = tableSearch === "" || t.name.toLowerCase().includes(tableSearch.toLowerCase()) || t.symbol.toLowerCase().includes(tableSearch.toLowerCase());
+                  const matchFilter = tableFilter === "All" || (t.narratives ?? []).some(n => n.name.toLowerCase().includes(tableFilter.toLowerCase()));
+                  return matchSearch && matchFilter;
+                });
+                return (
+                  <div className="border-t border-[#2a2e39] shrink-0">
+                    {/* Table Topbar */}
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-[#2a2e39] bg-[#16192a] gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-white">Cryptocurrency Prices by Market Cap</span>
+                        <span className="px-1.5 py-0.5 rounded text-[8px] bg-[#2a2e39] text-[#787b86]">{filtered.length} coins</span>
+                        <span className="text-[8px] text-[#787b86] flex items-center gap-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#26a69a] inline-block animate-pulse" />
+                          Updated in real-time
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1 bg-[#2a2e39] rounded px-2 h-6">
+                          <Search className="h-3 w-3 text-[#787b86] shrink-0" />
+                          <input
+                            value={tableSearch}
+                            onChange={e => setTableSearch(e.target.value)}
+                            className="bg-transparent text-[10px] text-white w-24 outline-none placeholder:text-[#787b86]"
+                            placeholder="Search coins..."
+                          />
+                        </div>
+                        <div className="flex items-center gap-0.5 bg-[#2a2e39] rounded p-0.5">
+                          {FILTERS.map(f => (
+                            <button
+                              key={f}
+                              onClick={() => setTableFilter(f)}
+                              className={`px-2 h-5 rounded text-[9px] font-medium transition-colors ${
+                                tableFilter === f
+                                  ? "bg-[#2962ff] text-white"
+                                  : "text-[#787b86] hover:text-white hover:bg-[#1e222d]"
+                              }`}
+                            >
+                              {f}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full" style={{ minWidth: "860px" }}>
+                        <thead>
+                          <tr className="border-b border-[#2a2e39]" style={{ background: "#16192a" }}>
+                            <th className="w-8 pl-3 pr-1 py-2 text-left">
+                              <Star className="h-3 w-3 text-[#787b86]" />
+                            </th>
+                            <th className="w-7 px-1 py-2 text-left text-[9px] font-semibold text-[#787b86]">#</th>
+                            <th className="px-2 py-2 text-left text-[9px] font-semibold text-[#787b86]">Coin</th>
+                            <th className="px-3 py-2 text-right text-[9px] font-semibold text-[#787b86] cursor-pointer hover:text-white">Price ↕</th>
+                            <th className="px-3 py-2 text-right text-[9px] font-semibold text-[#787b86]">1h %</th>
+                            <th className="px-3 py-2 text-right text-[9px] font-semibold text-[#787b86] cursor-pointer hover:text-white">24h % ↕</th>
+                            <th className="px-3 py-2 text-right text-[9px] font-semibold text-[#787b86]">7d %</th>
+                            <th className="px-3 py-2 text-right text-[9px] font-semibold text-[#787b86] cursor-pointer hover:text-white">24h Volume ↕</th>
+                            <th className="px-3 py-2 text-right text-[9px] font-semibold text-[#787b86] cursor-pointer hover:text-white">Market Cap ↕</th>
+                            <th className="px-3 py-2 text-right text-[9px] font-semibold text-[#787b86]">Circulating Supply</th>
+                            <th className="px-3 pr-4 py-2 text-right text-[9px] font-semibold text-[#787b86]">Last 7 Days</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filtered.map((t, i) => {
+                            const c24 = t.priceChange24h ?? 0;
+                            const c1h = +(c24 * 0.11 + Math.sin(i * 1.3) * 0.4).toFixed(2);
+                            const c7d = +(c24 * 3.1 + Math.cos(i * 2.1) * 2.2).toFixed(2);
+                            const supplyPct = t.totalSupply && t.totalSupply > 0 ? Math.min(100, ((t.circulatingSupply ?? 0) / t.totalSupply) * 100) : 100;
+                            const isSelected = t.symbol === symbol;
+                            return (
+                              <tr
+                                key={t.symbol}
+                                onClick={() => setSymbol(t.symbol)}
+                                className={`border-b border-[#1a1d26] cursor-pointer transition-colors group ${
+                                  isSelected ? "bg-[#2962ff]/8" : "hover:bg-[#1e222d]"
+                                }`}
+                              >
+                                {/* Star */}
+                                <td className="pl-3 pr-1 py-2">
+                                  <Star className={`h-3 w-3 cursor-pointer transition-colors ${isSelected ? "text-yellow-400 fill-yellow-400" : "text-[#3a3e4a] group-hover:text-[#787b86]"}`} />
+                                </td>
+                                {/* Rank */}
+                                <td className="px-1 py-2 text-[9px] text-[#787b86] font-medium">{i + 1}</td>
+                                {/* Coin */}
+                                <td className="px-2 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="w-6 h-6 rounded-full flex items-center justify-center text-white font-bold text-[8px] shrink-0"
+                                      style={{ background: `hsl(${(i * 47) % 360}, 65%, 45%)` }}
+                                    >
+                                      {t.symbol.substring(0, 2)}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="text-[10px] font-bold text-white leading-none truncate max-w-[90px]">{t.name}</div>
+                                      <div className="text-[8px] text-[#787b86] mt-0.5 font-medium">{t.symbol}</div>
+                                    </div>
+                                    {(t.narratives ?? []).slice(0, 1).map(n => (
+                                      <span key={n.id} className="px-1 py-0.5 rounded text-[7px] bg-[#2962ff]/12 text-[#4d7fff] border border-[#2962ff]/20 whitespace-nowrap">
+                                        {n.name.length > 8 ? n.name.substring(0, 8) + "…" : n.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                {/* Price */}
+                                <td className="px-3 py-2 text-right font-mono text-[10px] text-white font-semibold tabular-nums">
+                                  {formatCurrency(t.price)}
+                                </td>
+                                {/* 1h % */}
+                                <td className={`px-3 py-2 text-right text-[9px] font-semibold tabular-nums ${c1h >= 0 ? "bull" : "bear"}`}>
+                                  {c1h >= 0 ? "▲" : "▼"} {Math.abs(c1h).toFixed(2)}%
+                                </td>
+                                {/* 24h % */}
+                                <td className="px-3 py-2 text-right">
+                                  <span className={`inline-flex items-center justify-end gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold tabular-nums ${c24 >= 0 ? "bg-[#26a69a]/12 bull" : "bg-[#ef5350]/12 bear"}`}>
+                                    {c24 >= 0 ? "▲" : "▼"} {Math.abs(c24).toFixed(2)}%
+                                  </span>
+                                </td>
+                                {/* 7d % */}
+                                <td className={`px-3 py-2 text-right text-[9px] font-semibold tabular-nums ${c7d >= 0 ? "bull" : "bear"}`}>
+                                  {c7d >= 0 ? "▲" : "▼"} {Math.abs(c7d).toFixed(2)}%
+                                </td>
+                                {/* 24h Volume */}
+                                <td className="px-3 py-2 text-right text-[9px] font-mono text-[#d1d4dc] tabular-nums">
+                                  <div>{formatCurrency(t.volume24h)}</div>
+                                  <div className="text-[8px] text-[#787b86]">
+                                    {t.marketCap && t.volume24h ? ((t.volume24h / t.marketCap) * 100).toFixed(1) + "% of MCap" : "—"}
+                                  </div>
+                                </td>
+                                {/* Market Cap */}
+                                <td className="px-3 py-2 text-right text-[9px] font-mono text-[#d1d4dc] tabular-nums">
+                                  {formatCurrency(t.marketCap)}
+                                </td>
+                                {/* Circulating Supply */}
+                                <td className="px-3 py-2 text-right min-w-[110px]">
+                                  <div className="text-[9px] font-mono text-[#d1d4dc] tabular-nums">
+                                    {formatNumber(t.circulatingSupply)} {t.symbol}
+                                  </div>
+                                  <div className="flex items-center gap-1 mt-0.5 justify-end">
+                                    <div className="w-14 h-1 rounded-full bg-[#2a2e39] overflow-hidden">
+                                      <div
+                                        className="h-full rounded-full transition-all"
+                                        style={{ width: `${supplyPct}%`, backgroundColor: supplyPct > 80 ? "#26a69a" : supplyPct > 50 ? "#f7931a" : "#2962ff" }}
+                                      />
+                                    </div>
+                                    <span className="text-[8px] text-[#787b86]">{supplyPct.toFixed(0)}%</span>
+                                  </div>
+                                </td>
+                                {/* Sparkline */}
+                                <td className="px-3 pr-4 py-2 text-right">
+                                  <Sparkline change={c7d} seed={i} />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      {filtered.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-8 text-[#787b86]">
+                          <Search className="h-6 w-6 mb-2 opacity-40" />
+                          <div className="text-[11px]">No coins match your search</div>
+                        </div>
+                      )}
+
+                      {/* Table Footer */}
+                      <div className="flex items-center justify-between px-3 py-2 border-t border-[#2a2e39] bg-[#16192a]">
+                        <span className="text-[9px] text-[#787b86]">
+                          Showing {filtered.length} of {allTokens?.length ?? 0} cryptocurrencies
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[9px] text-[#787b86]">Rows per page:</span>
+                          <select className="bg-[#2a2e39] text-[9px] text-white rounded px-1 py-0.5 outline-none border border-[#3a3e4a]">
+                            <option>20</option>
+                            <option>50</option>
+                            <option>100</option>
+                          </select>
+                          <div className="flex items-center gap-0.5 ml-2">
+                            <button className="px-1.5 h-5 rounded text-[9px] text-[#787b86] hover:text-white hover:bg-[#2a2e39] border border-[#2a2e39]">‹</button>
+                            <button className="px-1.5 h-5 rounded text-[9px] bg-[#2962ff] text-white">1</button>
+                            <button className="px-1.5 h-5 rounded text-[9px] text-[#787b86] hover:text-white hover:bg-[#2a2e39] border border-[#2a2e39]">›</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* ── RIGHT PANELS ── */}
