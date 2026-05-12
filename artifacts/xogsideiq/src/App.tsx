@@ -8,7 +8,6 @@ import { AppLayout } from "@/components/layout";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Research from "@/pages/Research";
-import TokenDetail from "@/pages/TokenDetail";
 import Narratives from "@/pages/Narratives";
 import NarrativeDetail from "@/pages/NarrativeDetail";
 import Signals from "@/pages/Signals";
@@ -18,18 +17,22 @@ const queryClient = new QueryClient();
 
 function Router() {
   return (
-    <AppLayout>
-      <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/research" component={Research} />
-        <Route path="/research/:symbol" component={TokenDetail} />
-        <Route path="/narratives" component={Narratives} />
-        <Route path="/narratives/:slug" component={NarrativeDetail} />
-        <Route path="/signals" component={Signals} />
-        <Route path="/portfolio" component={Portfolio} />
-        <Route component={NotFound} />
-      </Switch>
-    </AppLayout>
+    <Switch>
+      <Route path="/" component={Home} />
+      <Route path="/research/:symbol" component={Home} />
+      <Route>
+        <AppLayout>
+          <Switch>
+            <Route path="/research" component={Research} />
+            <Route path="/narratives" component={Narratives} />
+            <Route path="/narratives/:slug" component={NarrativeDetail} />
+            <Route path="/signals" component={Signals} />
+            <Route path="/portfolio" component={Portfolio} />
+            <Route component={NotFound} />
+          </Switch>
+        </AppLayout>
+      </Route>
+    </Switch>
   );
 }
 

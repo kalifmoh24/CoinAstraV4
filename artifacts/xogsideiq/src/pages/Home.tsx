@@ -1,182 +1,971 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useParams, Link } from "wouter";
 import {
-  useGetMarketOverview,
-  useGetMarketMovers,
-  useListNews,
-  getGetMarketOverviewQueryKey,
-  getGetMarketMoversQueryKey,
-  getListNewsQueryKey,
+  useGetToken, getGetTokenQueryKey,
+  useGetTokenScores, getGetTokenScoresQueryKey,
+  useGetTokenAiResearch, getGetTokenAiResearchQueryKey,
+  useGetTokenNews, getGetTokenNewsQueryKey,
+  useGetMarketOverview, getGetMarketOverviewQueryKey,
+  useGetMarketMovers, getGetMarketMoversQueryKey,
+  useListNarratives, getListNarrativesQueryKey,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis } from "recharts";
+import {
+  Star, Plus, ChevronDown, BarChart2, Activity, Maximize2,
+  ArrowUpRight, ArrowDownRight, Globe, TrendingUp, Bell, Search,
+  Brain, Cpu, Layers, Shield, RefreshCw, Laugh, Gamepad2, Building,
+  DollarSign, ChevronRight, ExternalLink, Copy, Zap, BookOpen, Compass,
+  Briefcase, LayoutDashboard
+} from "lucide-react";
 import { formatCurrency, formatPercent, formatNumber } from "@/lib/format";
-import { ArrowDownRight, ArrowUpRight, TrendingUp, AlertTriangle } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
 
-export default function Home() {
-  const { data: overview, isLoading: isOverviewLoading } = useGetMarketOverview({
-    query: { queryKey: getGetMarketOverviewQueryKey() }
-  });
+const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "D", "W", "M"];
+const TOKENS = ["BTC", "ETH", "SOL", "BNB", "MATIC", "ARB", "LINK", "RNDR", "FET"];
 
-  const { data: movers, isLoading: isMoversLoading } = useGetMarketMovers({
-    query: { queryKey: getGetMarketMoversQueryKey() }
-  });
+const VESTING = [
+  { name: "Aptos", symbol: "APT", pct: 42.3, date: "Apr 12" },
+  { name: "Immuta...", symbol: "IMX", pct: 38.7, date: "May 8" },
+  { name: "Arbitru...", symbol: "ARB", pct: 31.2, date: "May 31" },
+  { name: "Optimis...", symbol: "OP", pct: 29.4, date: "May 31" },
+  { name: "SUI", symbol: "SUI", pct: 27.1, date: "May 28" },
+  { name: "Worldco...", symbol: "WLD", pct: 24.8, date: "Jun 7" },
+  { name: "Sei", symbol: "SEI", pct: 23.4, date: "Jun 3" },
+  { name: "Starklane...", symbol: "STRK", pct: 21.7, date: "Jun 1" },
+  { name: "The Sa...", symbol: "THE", pct: 19.3, date: "Jun 1" },
+  { name: "Axie Inf...", symbol: "AXS", pct: 18.6, date: "Jun 9" },
+  { name: "dYdX D...", symbol: "DYDX", pct: 16.4, date: "Jun 1" },
+  { name: "Aave A...", symbol: "AAVE", pct: 15.2, date: "Jun 3" },
+];
 
-  const { data: news, isLoading: isNewsLoading } = useListNews({ limit: 5 }, {
-    query: { queryKey: getListNewsQueryKey({ limit: 5 }) }
-  });
+const MEME_COINS = [
+  { symbol: "BONK", change: 4.7 },
+  { symbol: "M", change: -2.4 },
+  { symbol: "PEPE", change: 1.8 },
+  { symbol: "SHIB", change: 1.3 },
+  { symbol: "DOGE", change: 0.7 },
+];
+
+const WHALE_TXS = [
+  { addr: "0x28C6...a8E1", action: "Bought", amount: "6357 ETH", usd: "$14.83M", time: "2m ago" },
+  { addr: "0x7F3B...44C2", action: "Accumulated", amount: "5086 ETH", usd: "$11.86M", time: "18m ago" },
+  { addr: "0x1A5E...67F3", action: "Transferred", amount: "3178 ETH", usd: "$7.41M", time: "42m ago" },
+  { addr: "0x9D2C...a8A4", action: "Sold", amount: "1907 ETH", usd: "$4.45M", time: "1h ago" },
+];
+
+const TOKENOMICS_DATA = [
+  { name: "Staking", value: 27.6, color: "#2962ff" },
+  { name: "Treasury", value: 17.1, color: "#26a69a" },
+  { name: "Burned", value: 12.4, color: "#ef5350" },
+  { name: "Ecosystem", value: 18.3, color: "#f7931a" },
+  { name: "Other", value: 24.6, color: "#787b86" },
+];
+
+const VESTING_BARS = [
+  { year: "2024", value: 12.4 },
+  { year: "2025", value: 8.2 },
+  { year: "2026", value: 5.6 },
+  { year: "2027", value: 3.1 },
+  { year: "2028", value: 1.8 },
+];
+
+const NAV_ITEMS = [
+  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/research", label: "Research", icon: Compass },
+  { path: "/narratives", label: "Narratives", icon: BookOpen },
+  { path: "/signals", label: "Signals", icon: TrendingUp },
+  { path: "/portfolio", label: "Portfolio", icon: Briefcase },
+];
+
+function TradingViewChart({ symbol }: { symbol: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const initialized = useRef(false);
+
+  useEffect(() => {
+    if (!ref.current || initialized.current) return;
+    initialized.current = true;
+
+    const containerId = `tv_${symbol}_${Math.random().toString(36).slice(2, 7)}`;
+    ref.current.id = containerId;
+
+    const init = () => {
+      if (ref.current && (window as any).TradingView) {
+        ref.current.innerHTML = "";
+        new (window as any).TradingView.widget({
+          autosize: true,
+          symbol: `BINANCE:${symbol}USDT`,
+          interval: "D",
+          timezone: "Etc/UTC",
+          theme: "dark",
+          style: "1",
+          locale: "en",
+          toolbar_bg: "#131722",
+          enable_publishing: false,
+          hide_top_toolbar: false,
+          allow_symbol_change: false,
+          container_id: containerId,
+          backgroundColor: "#131722",
+          gridColor: "rgba(42,46,57,0.5)",
+          hide_legend: false,
+          save_image: false,
+        });
+      }
+    };
+
+    if ((window as any).TradingView) {
+      init();
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://s3.tradingview.com/tv.js";
+      script.async = true;
+      script.onload = init;
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      if (ref.current) ref.current.innerHTML = "";
+      initialized.current = false;
+    };
+  }, [symbol]);
+
+  return <div ref={ref} className="w-full h-full" />;
+}
+
+function pct(v: number) {
+  return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+}
+
+function PctChange({ v, className = "" }: { v: number; className?: string }) {
+  return (
+    <span className={`${v >= 0 ? "bull" : "bear"} ${className}`}>
+      {v >= 0 ? "▲" : "▼"} {Math.abs(v).toFixed(2)}%
+    </span>
+  );
+}
+
+function SemiGauge({ value, label, color }: { value: number; label: string; color: string }) {
+  const r = 44;
+  const cx = 60;
+  const cy = 58;
+  const startAngle = Math.PI;
+  const endAngle = 0;
+  const pctVal = value / 100;
+  const angle = startAngle + pctVal * (endAngle - startAngle);
+  const bgX1 = cx + r * Math.cos(startAngle);
+  const bgY1 = cy + r * Math.sin(startAngle);
+  const bgX2 = cx + r * Math.cos(endAngle);
+  const bgY2 = cy + r * Math.sin(endAngle);
+  const vX = cx + r * Math.cos(angle);
+  const vY = cy + r * Math.sin(angle);
+  const largeArc = pctVal > 0.5 ? 1 : 0;
+  const needleAngle = Math.PI + pctVal * Math.PI;
+  const needleLen = 34;
+  const nx = cx + needleLen * Math.cos(needleAngle);
+  const ny = cy + needleLen * Math.sin(needleAngle);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Market Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Real-time macro intelligence and crypto sentiment.</p>
+    <svg viewBox="0 0 120 68" className="w-full max-w-[110px]">
+      <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`} fill="none" stroke="#2a2e39" strokeWidth="10" strokeLinecap="round" />
+      <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 ${largeArc} 1 ${vX} ${vY}`} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" />
+      <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#d1d4dc" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx={cx} cy={cy} r="3" fill="#d1d4dc" />
+      <text x={cx} y={cy - 8} textAnchor="middle" fontSize="15" fontWeight="bold" fill="white">{value}</text>
+      <text x={cx} y={cy + 8} textAnchor="middle" fontSize="8" fill="#787b86">{label}</text>
+    </svg>
+  );
+}
+
+export default function Home() {
+  const params = useParams();
+  const [symbol, setSymbol] = useState(params.symbol?.toUpperCase() || "ETH");
+  const [tf, setTf] = useState("D");
+  const [aiTab, setAiTab] = useState("ai");
+  const [activeNav, setActiveNav] = useState("Overview");
+
+  const { data: token } = useGetToken(symbol, { query: { queryKey: getGetTokenQueryKey(symbol) } });
+  const { data: scores } = useGetTokenScores(symbol, { query: { queryKey: getGetTokenScoresQueryKey(symbol) } });
+  const { data: aiResearch } = useGetTokenAiResearch(symbol, { query: { queryKey: getGetTokenAiResearchQueryKey(symbol) } });
+  const { data: news } = useGetTokenNews(symbol, { query: { queryKey: getGetTokenNewsQueryKey(symbol) } });
+  const { data: overview } = useGetMarketOverview({ query: { queryKey: getGetMarketOverviewQueryKey() } });
+  const { data: movers } = useGetMarketMovers({ query: { queryKey: getGetMarketMoversQueryKey() } });
+  const { data: narratives } = useListNarratives({ query: { queryKey: getListNarrativesQueryKey() } });
+
+  const price = token?.price ?? 0;
+  const change24h = token?.priceChange24h ?? 0;
+
+  const keyLevels = {
+    r1: price * 1.05,
+    r2: price * 1.10,
+    r3: price * 1.18,
+    s1: price * 0.95,
+    s2: price * 0.90,
+    s3: price * 0.855,
+  };
+
+  const fg = overview?.fearGreedIndex ?? 48;
+  const fgLabel = overview?.fearGreedLabel ?? "Neutral";
+  const fgColor = fg < 25 ? "#ef5350" : fg < 45 ? "#f7931a" : fg < 55 ? "#787b86" : fg < 75 ? "#26a69a" : "#26a69a";
+
+  const topNarratives = (narratives ?? []).slice(0, 7).map(n => ({
+    name: n.name.length > 15 ? n.name.substring(0, 13) + "..." : n.name,
+    perf: n.perf24h,
+  }));
+
+  return (
+    <div className="h-screen flex flex-col overflow-hidden text-[#d1d4dc] bg-[#131722]" style={{ fontSize: "11px" }}>
+
+      {/* ── TOP HEADER ── */}
+      <div className="h-9 flex items-center border-b border-[#2a2e39] bg-[#1e222d] shrink-0 px-2 gap-1">
+        <div className="flex items-center gap-1 text-[#787b86] text-[10px] mr-1">
+          <span className="hover:text-white cursor-pointer">All Coins</span>
+          <ChevronRight className="h-3 w-3" />
         </div>
-        <div className="flex items-center gap-3">
-          {isOverviewLoading ? (
-            <Skeleton className="h-10 w-32" />
-          ) : overview ? (
-            <div className={`px-4 py-2 flex items-center gap-2 rounded-full border ${overview.fearGreedIndex < 40 ? 'bg-destructive/10 border-destructive/30 text-destructive' : overview.fearGreedIndex > 60 ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-secondary border-border text-foreground'}`}>
-              <AlertTriangle className="h-4 w-4" />
-              <span className="font-bold text-sm">F&G: {overview.fearGreedIndex} ({overview.fearGreedLabel})</span>
+
+        <div className="flex items-center gap-1 border border-[#2a2e39] rounded px-2 h-6 bg-[#131722]">
+          <span className="font-bold text-white text-[11px]">{symbol}/USDT</span>
+          <Star className="h-3 w-3 text-[#787b86]" />
+          <ChevronDown className="h-3 w-3 text-[#787b86]" />
+        </div>
+
+        <div className="flex items-center gap-0.5 ml-1">
+          {TIMEFRAMES.map(t => (
+            <button
+              key={t}
+              onClick={() => setTf(t)}
+              className={`px-1.5 h-5 rounded text-[10px] font-medium transition-colors ${
+                tf === t ? "bg-primary text-white" : "text-[#787b86] hover:text-white hover:bg-[#2a2e39]"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <div className="ml-auto flex items-center gap-1">
+          {["Candles", "Indicators", "Alert", "Replay", "Save Layout"].map(item => (
+            <button key={item} className="px-2 h-6 rounded text-[10px] text-[#787b86] hover:text-white hover:bg-[#2a2e39] border border-[#2a2e39] transition-colors">
+              {item}
+            </button>
+          ))}
+          <button className="px-2 h-6 rounded text-[10px] font-bold text-white bg-primary hover:bg-primary/90 transition-colors flex items-center gap-1">
+            <Maximize2 className="h-3 w-3" /> FULLSCREEN
+          </button>
+        </div>
+      </div>
+
+      {/* ── MAIN BODY ── */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* ── LEFT SIDEBAR ── */}
+        <div className="w-48 border-r border-[#2a2e39] bg-[#1e222d] flex flex-col overflow-y-auto shrink-0">
+          <div className="p-2 border-b border-[#2a2e39]">
+            <div className="flex items-center gap-1.5 mb-1">
+              <div className="w-6 h-6 rounded-full bg-[#2962ff] flex items-center justify-center text-white font-bold text-[9px] shrink-0">
+                {symbol.substring(0, 2)}
+              </div>
+              <div>
+                <div className="font-bold text-white text-[11px] leading-tight">{token?.name ?? symbol}</div>
+                <div className="text-[#787b86] text-[10px]">{symbol}</div>
+              </div>
+              <Star className="h-3 w-3 text-[#787b86] ml-auto cursor-pointer hover:text-yellow-400" />
             </div>
-          ) : null}
+
+            <div className="font-bold text-white text-[20px] leading-tight font-mono">
+              {price > 0 ? formatCurrency(price) : "---"}
+            </div>
+            <div className={`text-[10px] font-medium flex items-center gap-0.5 mb-2 ${change24h >= 0 ? "bull" : "bear"}`}>
+              {change24h >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+              {Math.abs(change24h).toFixed(2)}% (24h)
+              <span className="text-[#787b86] ml-0.5">• Market Open</span>
+            </div>
+
+            <div className="flex gap-1">
+              <button className="flex-1 h-6 rounded text-[9px] font-medium bg-[#2962ff]/20 text-[#2962ff] border border-[#2962ff]/40 hover:bg-[#2962ff]/30 transition-colors">
+                ☆ In Watchlist
+              </button>
+              <button className="flex-1 h-6 rounded text-[9px] font-medium bg-[#26a69a]/20 text-[#26a69a] border border-[#26a69a]/40 hover:bg-[#26a69a]/30 transition-colors">
+                + Portfolio
+              </button>
+            </div>
+          </div>
+
+          <div className="p-1.5 border-b border-[#2a2e39] space-y-0.5">
+            {[
+              { label: "Market Cap", value: formatCurrency(token?.marketCap), change: "+0.13%" },
+              { label: "FDV", value: formatCurrency(token?.fdv), change: null },
+              { label: "24h Volume", value: formatCurrency(token?.volume24h), change: "+9.19%" },
+              { label: "Circ. Supply", value: `${formatNumber(token?.circulatingSupply)} ${symbol}`, change: null },
+              { label: "Total Supply", value: `${formatNumber(token?.totalSupply)} ${symbol}`, change: null },
+              { label: "Dominance", value: symbol === "BTC" ? `${overview?.btcDominance?.toFixed(1)}%` : symbol === "ETH" ? "9.52%" : "—", change: null },
+              { label: "Rank", value: symbol === "BTC" ? "#1" : symbol === "ETH" ? "#2" : "—", change: null },
+            ].map(row => (
+              <div key={row.label} className="flex items-center justify-between px-0.5">
+                <span className="text-[#787b86] text-[10px]">{row.label}</span>
+                <span className="text-white text-[10px] font-medium flex items-center gap-1">
+                  {row.value}
+                  {row.change && <span className="bull text-[9px]">{row.change}</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="p-1 border-b border-[#2a2e39]">
+            {["Overview", "Markets", "News", "Tokenomics", "On-Chain", "Holders", "Analytics", "AI Insights", "Widgets", "Alerts"].map(item => (
+              <button
+                key={item}
+                onClick={() => setActiveNav(item)}
+                className={`w-full text-left px-2 py-1 rounded text-[10px] transition-colors flex items-center gap-1 ${
+                  activeNav === item ? "bg-[#2962ff]/15 text-[#2962ff]" : "text-[#787b86] hover:text-white hover:bg-[#2a2e39]"
+                }`}
+              >
+                {activeNav === item && <div className="w-0.5 h-3 bg-[#2962ff] rounded-full" />}
+                {item}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-1.5 border-b border-[#2a2e39]">
+            <div className="text-[9px] font-bold uppercase text-[#787b86] mb-1 px-0.5">Links</div>
+            <div className="flex gap-2 px-0.5">
+              {["Website", "Whitepaper", "Twitter"].map(link => (
+                <a key={link} href="#" className="text-[#2962ff] text-[9px] hover:underline">{link}</a>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-1.5 border-b border-[#2a2e39]">
+            <div className="text-[9px] font-bold uppercase text-[#787b86] mb-1 px-0.5">Contracts</div>
+            <div className="flex items-center gap-1 px-0.5">
+              <span className="text-[#d1d4dc] text-[9px] font-mono">0x2170...f918</span>
+              <Copy className="h-2.5 w-2.5 text-[#787b86] cursor-pointer hover:text-white" />
+            </div>
+          </div>
+
+          <div className="p-1.5 m-1 rounded border border-[#2962ff]/30 bg-[#2962ff]/10">
+            <div className="text-[9px] font-bold text-white mb-0.5">ALL COINS AVAILABLE</div>
+            <div className="text-[9px] text-[#787b86] space-y-0.5">
+              <div>✓ All existing coins listed</div>
+              <div>✓ New coins auto-added</div>
+              <div>✓ Real-time market data</div>
+              <div>✓ 24/7 automatic updates</div>
+            </div>
+            <Link href="/research">
+              <button className="mt-1.5 w-full h-5 rounded text-[9px] font-bold bg-[#2962ff] text-white hover:bg-[#2962ff]/90 transition-colors">
+                View All Coins
+              </button>
+            </Link>
+          </div>
+
+          <div className="p-1 mt-auto border-t border-[#2a2e39]">
+            <div className="flex gap-0.5">
+              {NAV_ITEMS.map(item => (
+                <Link key={item.path} href={item.path}>
+                  <button className="flex-1 flex flex-col items-center gap-0.5 p-1 rounded text-[#787b86] hover:text-white hover:bg-[#2a2e39] transition-colors">
+                    <item.icon className="h-3 w-3" />
+                    <span className="text-[8px]">{item.label}</span>
+                  </button>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard 
-          title="BTC Price" 
-          value={overview?.btcPrice} 
-          change={overview?.btcChange24h} 
-          isCurrency 
-          isLoading={isOverviewLoading} 
-        />
-        <MetricCard 
-          title="ETH Price" 
-          value={overview?.ethPrice} 
-          change={overview?.ethChange24h} 
-          isCurrency 
-          isLoading={isOverviewLoading} 
-        />
-        <MetricCard 
-          title="Total Market Cap" 
-          value={overview?.totalMarketCap} 
-          isCurrency 
-          isLoading={isOverviewLoading} 
-        />
-        <MetricCard 
-          title="24h Volume" 
-          value={overview?.totalVolume24h} 
-          isCurrency 
-          isLoading={isOverviewLoading} 
-        />
-      </div>
+        {/* ── CENTER + RIGHT ── */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex flex-1 overflow-hidden">
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="border-card-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" /> Top Gainers
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isMoversLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+            {/* CHART + BOTTOM */}
+            <div className="flex-1 flex flex-col overflow-y-auto">
+
+              {/* Chart Toolbar */}
+              <div className="h-7 flex items-center border-b border-[#2a2e39] bg-[#1e222d] px-2 gap-2 shrink-0">
+                <div className="flex items-center gap-1 text-[#787b86] text-[9px]">
+                  {["1D", "5D", "1M", "3M", "6M", "YTD", "1Y", "5Y", "All"].map(t => (
+                    <button key={t} className="px-1 hover:text-white transition-colors">{t}</button>
+                  ))}
                 </div>
-              ) : (
-                <div className="space-y-1">
-                  {movers?.gainers.slice(0, 5).map(token => (
-                    <div key={token.symbol} className="flex items-center justify-between p-3 rounded-lg hover:bg-secondary/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center text-xs font-bold shrink-0">
-                          {token.symbol.substring(0, 2)}
+                <div className="ml-auto flex items-center gap-1">
+                  {["Compare", "Indicators", "Templates", "Alert", "Replay"].map(item => (
+                    <button key={item} className="px-1.5 h-5 rounded text-[9px] text-[#787b86] hover:text-white hover:bg-[#2a2e39] transition-colors">
+                      {item}
+                    </button>
+                  ))}
+                  <button className="px-1.5 h-5 rounded text-[9px] font-medium text-white bg-[#2962ff]/20 border border-[#2962ff]/40">
+                    Multi-Chart
+                  </button>
+                </div>
+              </div>
+
+              {/* TradingView Chart */}
+              <div className="h-[420px] shrink-0 border-b border-[#2a2e39]">
+                <TradingViewChart symbol={symbol} />
+              </div>
+
+              {/* ── BOTTOM ANALYTICS PANELS ── */}
+              <div className="flex border-b border-[#2a2e39] shrink-0" style={{ minHeight: "200px" }}>
+
+                {/* TOKENOMICS */}
+                <div className="w-44 border-r border-[#2a2e39] shrink-0">
+                  <div className="panel-header">
+                    <span className="panel-title">Tokenomics</span>
+                    <span className="panel-link">View All →</span>
+                  </div>
+                  <div className="p-1.5">
+                    <div className="h-24">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={TOKENOMICS_DATA} cx="50%" cy="50%" innerRadius={28} outerRadius={40} paddingAngle={1} dataKey="value">
+                            {TOKENOMICS_DATA.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-0.5">
+                      {TOKENOMICS_DATA.map(d => (
+                        <div key={d.name} className="flex items-center justify-between text-[9px]">
+                          <div className="flex items-center gap-1">
+                            <div className="w-1.5 h-1.5 rounded-sm" style={{ backgroundColor: d.color }} />
+                            <span className="text-[#787b86]">{d.name}</span>
+                          </div>
+                          <span className="text-white font-medium">{d.value}</span>
                         </div>
-                        <div>
-                          <div className="font-bold">{token.symbol}</div>
-                          <div className="text-xs text-muted-foreground">{token.name}</div>
+                      ))}
+                    </div>
+                    <div className="mt-1 pt-1 border-t border-[#2a2e39] text-[9px] text-[#787b86]">
+                      Total Supply <span className="text-white">{formatNumber(token?.totalSupply)} {symbol}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* VESTING SCHEDULE */}
+                <div className="w-44 border-r border-[#2a2e39] shrink-0">
+                  <div className="panel-header">
+                    <span className="panel-title">Vesting Schedule</span>
+                    <span className="panel-link">View Full →</span>
+                  </div>
+                  <div className="p-1.5">
+                    <div className="text-[9px] text-[#787b86] mb-0.5">Next Unlock</div>
+                    <div className="text-[11px] font-bold text-white mb-0.5">12.4M {symbol}</div>
+                    <div className="text-[9px] text-[#787b86] mb-1">$43.5M (3.8% of supply) in 30 days</div>
+                    <div className="h-20">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={VESTING_BARS} margin={{ top: 4, right: 4, bottom: 4, left: 0 }}>
+                          <XAxis dataKey="year" tick={{ fontSize: 8, fill: "#787b86" }} axisLine={false} tickLine={false} />
+                          <Bar dataKey="value" fill="#2962ff" radius={[2, 2, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI ANALYSIS */}
+                <div className="w-52 border-r border-[#2a2e39] shrink-0">
+                  <div className="panel-header">
+                    <span className="panel-title">AI Analysis</span>
+                    <span className="panel-link">View Full →</span>
+                  </div>
+                  <div className="p-1.5 space-y-1.5">
+                    <div className="text-[9px] text-[#d1d4dc] leading-relaxed line-clamp-4">
+                      {aiResearch?.summary ?? `${token?.name ?? symbol} is a leading smart contract platform with strong developer activity and expanding DeFi ecosystem.`}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(token?.narratives ?? []).slice(0, 3).map(n => (
+                        <span key={n.id} className="px-1.5 py-0.5 rounded-sm text-[8px] font-medium bg-[#2962ff]/20 text-[#2962ff] border border-[#2962ff]/30">
+                          {n.name}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] text-[#787b86]">Sentiment</span>
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-[#787b86]/20 text-[#787b86]">Neutral</span>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between text-[9px] mb-0.5">
+                        <span className="text-[#787b86]">Narrative Strength</span>
+                        <span className="font-bold text-white">{scores?.narrativeMomentumScore ?? 60}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[#2a2e39]">
+                        <div className="h-full rounded-full bg-[#26a69a]" style={{ width: `${scores?.narrativeMomentumScore ?? 60}%` }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between text-[9px] mb-0.5">
+                        <span className="text-[#787b86]">AI Confidence</span>
+                        <span className="font-bold text-white">50%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[#2a2e39]">
+                        <div className="h-full rounded-full bg-[#2962ff]" style={{ width: "50%" }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* NARRATIVE STRENGTH */}
+                <div className="w-40 border-r border-[#2a2e39] shrink-0">
+                  <div className="panel-header">
+                    <span className="panel-title">Narrative Strength</span>
+                  </div>
+                  <div className="p-1.5">
+                    <div className="text-[28px] font-bold text-white leading-none">{scores?.narrativeMomentumScore ?? 60}%</div>
+                    <div className="text-[10px] bull font-bold mb-1.5">Strong</div>
+                    <div className="space-y-1">
+                      {["Reputation", "Regulation", "Gas Fees"].map((label, i) => {
+                        const vals = [72, 48, 55];
+                        const colors = ["#26a69a", "#ef5350", "#f7931a"];
+                        return (
+                          <div key={label}>
+                            <div className="flex justify-between text-[9px] mb-0.5">
+                              <span className="text-[#787b86]">{label}</span>
+                              <span style={{ color: colors[i] }}>{vals[i]}%</span>
+                            </div>
+                            <div className="h-1 rounded-full bg-[#2a2e39]">
+                              <div className="h-full rounded-full" style={{ width: `${vals[i]}%`, backgroundColor: colors[i] }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* FEAR & GREED */}
+                <div className="w-36 border-r border-[#2a2e39] shrink-0">
+                  <div className="panel-header">
+                    <span className="panel-title">Fear & Greed Index</span>
+                    <span className="panel-link">View All →</span>
+                  </div>
+                  <div className="p-1.5 flex flex-col items-center">
+                    <SemiGauge value={fg} label={fgLabel} color={fgColor} />
+                    <div className="text-[10px] font-bold text-white">{fg} — {fgLabel}</div>
+                    <div className="text-[9px] text-[#787b86] mt-0.5">Yesterday: {fg - 1}</div>
+                    <div className="mt-1 w-full">
+                      <div className="flex justify-between text-[8px] text-[#787b86]">
+                        <span>Extreme Fear</span>
+                        <span>Extreme Greed</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full mt-0.5" style={{ background: "linear-gradient(to right, #ef5350, #f7931a, #787b86, #26a69a)" }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* EXCHANGE FLOW */}
+                <div className="w-44 border-r border-[#2a2e39] shrink-0">
+                  <div className="panel-header">
+                    <span className="panel-title">Exchange Flow (24h)</span>
+                    <span className="panel-link">View All →</span>
+                  </div>
+                  <div className="p-1.5 space-y-1">
+                    {[
+                      { label: "Net Inflow", value: "-$14.63M", color: "#ef5350" },
+                      { label: "Exchange Inflow", value: "$11.864B", color: "#26a69a" },
+                      { label: "Exchange Outflow", value: "$13.347B", color: "#ef5350" },
+                    ].map(r => (
+                      <div key={r.label} className="flex justify-between items-center">
+                        <span className="text-[#787b86] text-[9px]">{r.label}</span>
+                        <span className="text-[9px] font-medium" style={{ color: r.color }}>{r.value}</span>
+                      </div>
+                    ))}
+                    <div className="mt-1.5 pt-1 border-t border-[#2a2e39]">
+                      <div className="flex flex-wrap gap-0.5">
+                        {Array.from({ length: 30 }).map((_, i) => {
+                          const colors = ["#26a69a", "#ef5350", "#26a69a", "#26a69a", "#ef5350"];
+                          return <div key={i} className="w-3 h-3 rounded-sm" style={{ backgroundColor: colors[i % colors.length], opacity: 0.7 + (i % 3) * 0.1 }} />;
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ON-CHAIN DATA */}
+                <div className="flex-1 shrink-0">
+                  <div className="panel-header">
+                    <span className="panel-title">On-Chain Data</span>
+                    <span className="panel-link">View All →</span>
+                  </div>
+                  <div className="p-1.5 space-y-1">
+                    {[
+                      { label: "Active Addresses", value: "44,489.4k", change: "+0.1%" },
+                      { label: "Transaction Count", value: "118.644M", change: "+0.1%" },
+                      { label: "TVL (DeFi)", value: formatCurrency(token?.marketCap ? token.marketCap * 0.012 : 4260000000), change: "+0.1%" },
+                      { label: "Gas Price (Gwei)", value: "18.7", change: "-12.4%" },
+                    ].map(r => (
+                      <div key={r.label} className="flex justify-between items-center">
+                        <span className="text-[#787b86] text-[9px]">{r.label}</span>
+                        <div className="text-right">
+                          <div className="text-[9px] font-medium text-white">{r.value}</div>
+                          <div className={`text-[8px] ${r.change.startsWith("+") ? "bull" : "bear"}`}>{r.change}</div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-mono font-medium">{formatCurrency(token.price)}</div>
-                        <div className="text-xs text-primary font-bold flex items-center justify-end gap-1">
-                          <ArrowUpRight className="h-3 w-3" /> {formatPercent(token.priceChange24h)}
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── AI TERMINAL ── */}
+              <div className="shrink-0">
+                {/* Tabs */}
+                <div className="h-8 flex items-center border-b border-[#2a2e39] bg-[#1e222d] px-2 gap-0.5">
+                  {[
+                    { id: "ai", label: "AI Terminal", pro: true },
+                    { id: "discovery", label: "Discovery" },
+                    { id: "onchain", label: "On-Chain" },
+                    { id: "intelligence", label: "Intelligence" },
+                    { id: "screener", label: "Screener" },
+                    { id: "whale", label: "Whale Tracker" },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setAiTab(tab.id)}
+                      className={`flex items-center gap-1 px-2.5 h-6 rounded text-[10px] font-medium transition-colors ${
+                        aiTab === tab.id ? "bg-[#2962ff]/20 text-[#2962ff] border border-[#2962ff]/40" : "text-[#787b86] hover:text-white hover:bg-[#2a2e39]"
+                      }`}
+                    >
+                      <Zap className="h-2.5 w-2.5" />
+                      {tab.label}
+                      {tab.pro && <span className="px-0.5 text-[7px] font-bold bg-[#2962ff] text-white rounded-sm ml-0.5">PRO</span>}
+                    </button>
+                  ))}
+                  <button className="ml-auto text-[9px] text-[#2962ff] hover:underline">View Full AI Dashboard →</button>
+                </div>
+
+                {/* AI Terminal Content */}
+                <div className="flex border-b border-[#2a2e39]">
+
+                  {/* BUY/SELL PROBABILITY */}
+                  <div className="w-60 border-r border-[#2a2e39] p-2">
+                    <div className="text-[9px] font-bold uppercase text-[#787b86] mb-1.5 flex items-center gap-1">
+                      AI BUY/SELL PROBABILITY —
+                      <span className="text-white">{symbol}</span>
+                      <span className="text-[#2962ff] cursor-pointer ml-1">CLICK FOR DETAILS →</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-20 h-20 rounded-full border-4 border-[#26a69a] flex flex-col items-center justify-center bg-[#26a69a]/10 shrink-0">
+                        <div className="text-[18px] font-bold text-white leading-none">60%</div>
+                        <div className="text-[8px] text-[#26a69a] font-bold">BUY</div>
+                      </div>
+                      <div className="flex-1 space-y-1.5">
+                        {[
+                          { label: "Buy", value: 60, color: "#26a69a" },
+                          { label: "Hold", value: 15, color: "#f7931a" },
+                          { label: "Sell", value: 25, color: "#ef5350" },
+                        ].map(b => (
+                          <div key={b.label}>
+                            <div className="flex justify-between text-[9px] mb-0.5">
+                              <span className="text-[#787b86]">{b.label}</span>
+                              <span className="text-white font-medium">{b.value}%</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-[#2a2e39]">
+                              <div className="h-full rounded-full" style={{ width: `${b.value}%`, backgroundColor: b.color }} />
+                            </div>
+                          </div>
+                        ))}
+                        <div className="text-[9px] text-[#787b86]">AI Confidence: <span className="text-white">50%</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI TREND PREDICTION */}
+                  <div className="flex-1 border-r border-[#2a2e39] p-2">
+                    <div className="text-[9px] font-bold uppercase text-[#787b86] mb-1.5 flex items-center gap-1">
+                      AI TREND PREDICTION — <span className="text-white">{symbol}</span>
+                      <span className="text-[#2962ff] cursor-pointer ml-1">CLICK FOR DETAILS →</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 mb-2">
+                      {[
+                        { tf: "3H", sentiment: "Neutral", conf: 55, color: "#787b86" },
+                        { tf: "4H", sentiment: "Neutral", conf: 52, color: "#787b86" },
+                        { tf: "1D", sentiment: "Neutral", conf: 45, color: "#787b86" },
+                        { tf: "1W", sentiment: "Neutral", conf: 40, color: "#787b86" },
+                      ].map(t => (
+                        <div key={t.tf} className="border border-[#2a2e39] rounded p-1.5 text-center">
+                          <div className="text-[8px] text-[#787b86] font-bold mb-0.5">{t.tf}</div>
+                          <div className="text-[9px] font-bold" style={{ color: t.color }}>— {t.sentiment}</div>
+                          <div className="h-1 rounded-full bg-[#2a2e39] mt-1">
+                            <div className="h-full rounded-full" style={{ width: `${t.conf}%`, backgroundColor: t.color }} />
+                          </div>
+                          <div className="text-[8px] text-[#787b86] mt-0.5">{t.conf}% conf</div>
                         </div>
+                      ))}
+                    </div>
+                    <div className="text-[9px] text-[#787b86] leading-relaxed">
+                      AI predicts neutral trend for {token?.name ?? symbol} on daily timeframe with 45% confidence based on multi-factor technical + on-chain analysis.
+                    </div>
+                  </div>
+
+                  {/* AI TRADE SETUPS */}
+                  <div className="w-72 border-r border-[#2a2e39] p-2">
+                    <div className="text-[9px] font-bold uppercase text-[#787b86] mb-1.5">
+                      AI TRADE SETUPS
+                      <span className="text-[#2962ff] cursor-pointer ml-1">CLICK FOR DETAILS →</span>
+                    </div>
+                    <div className="space-y-2">
+                      {[
+                        { type: "Long Setup", conf: "Medium Confidence", color: "#26a69a", entry: price * 0.98, sl: price * 0.95, tp1: price * 1.05, tp2: price * 1.12, rr: "1:3.5" },
+                        { type: "Short Setup", conf: "Low Confidence", color: "#ef5350", entry: price * 1.02, sl: price * 1.05, tp1: price * 0.95, tp2: price * 0.88, rr: "1:4.0" },
+                      ].map(s => (
+                        <div key={s.type} className="border border-[#2a2e39] rounded p-1.5">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-1">
+                              <div className="w-0 h-0" style={{ borderRight: "5px solid transparent", borderLeft: "5px solid transparent", [s.type === "Long Setup" ? "borderBottom" : "borderTop"]: `6px solid ${s.color}` }} />
+                              <span className="text-[9px] font-bold" style={{ color: s.color }}>{s.type}</span>
+                            </div>
+                            <span className="px-1 py-0.5 rounded text-[8px]" style={{ backgroundColor: `${s.color}20`, color: s.color, border: `1px solid ${s.color}40` }}>{s.conf}</span>
+                          </div>
+                          <div className="grid grid-cols-5 gap-1 text-[8px]">
+                            {["Entry", "Stop Loss", "TP1", "TP2", "R:R"].map(h => (
+                              <div key={h} className="text-[#787b86]">{h}</div>
+                            ))}
+                            <div className="text-white font-mono">{formatCurrency(s.entry)}</div>
+                            <div className="bear font-mono">{formatCurrency(s.sl)}</div>
+                            <div className="bull font-mono">{formatCurrency(s.tp1)}</div>
+                            <div className="bull font-mono">{formatCurrency(s.tp2)}</div>
+                            <div className="text-white font-mono">{s.rr}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* WHALE TRACKING */}
+                  <div className="flex-1 p-2">
+                    <div className="text-[9px] font-bold uppercase text-[#787b86] mb-1.5 flex items-center gap-1">
+                      WHALE WALLET TRACKING — <span className="text-white">{symbol}</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#26a69a] ml-1 animate-pulse" />
+                    </div>
+                    <div className="space-y-1">
+                      {WHALE_TXS.map(tx => (
+                        <div key={tx.addr} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-[#2a2e39]/50 transition-colors">
+                          <span className="text-[#2962ff] font-mono text-[9px] w-24 shrink-0">{tx.addr}</span>
+                          <span className={`text-[9px] font-medium w-20 shrink-0 ${tx.action === "Bought" || tx.action === "Accumulated" ? "bull" : tx.action === "Sold" ? "bear" : "text-[#f7931a]"}`}>
+                            {tx.action}
+                          </span>
+                          <span className="text-white text-[9px] flex-1">{tx.amount}</span>
+                          <span className="text-[#787b86] text-[9px] w-16 shrink-0">{tx.usd}</span>
+                          <span className="text-[#787b86] text-[9px] w-10 shrink-0 text-right">{tx.time}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── RIGHT PANELS ── */}
+            <div className="w-72 border-l border-[#2a2e39] bg-[#1e222d] overflow-y-auto shrink-0">
+
+              {/* AI INSIGHTS + VESTING SCHEDULES */}
+              <div className="flex border-b border-[#2a2e39]">
+
+                {/* AI INSIGHTS */}
+                <div className="flex-1 border-r border-[#2a2e39]">
+                  <div className="panel-header">
+                    <span className="panel-title">AI Insights</span>
+                    <span className="panel-link">View All →</span>
+                  </div>
+                  <div className="p-1.5">
+                    <div className="flex gap-1 mb-1">
+                      {["1d", "4d"].map(t => (
+                        <button key={t} className="px-1.5 h-4 rounded text-[8px] bg-[#2962ff]/20 text-[#2962ff] border border-[#2962ff]/40">{t}</button>
+                      ))}
+                      <span className="ml-1 px-1.5 h-4 rounded text-[8px] bg-[#787b86]/20 text-[#787b86] border border-[#787b86]/40 flex items-center">Neutral</span>
+                    </div>
+                    <div className="text-[9px] text-[#d1d4dc] leading-relaxed mb-1">
+                      Strong neutral momentum with 50% confidence based on technical analysis.
+                    </div>
+                    <div className="text-[9px] text-[#787b86] mb-0.5">Confidence</div>
+                    <div className="h-1.5 rounded-full bg-[#2a2e39] mb-1">
+                      <div className="h-full rounded-full bg-[#2962ff]" style={{ width: "50%" }} />
+                    </div>
+                    <div className="text-right text-[8px] text-[#2962ff]">50%</div>
+                  </div>
+                </div>
+
+                {/* VESTING SCHEDULES (right column header) */}
+                <div className="flex-1">
+                  <div className="panel-header">
+                    <span className="panel-title">Vesting Schedules</span>
+                    <span className="panel-link">View All</span>
+                  </div>
+                  <div>
+                    {VESTING.slice(0, 8).map(v => (
+                      <div key={v.symbol} className="row-item">
+                        <div className="flex items-center gap-1">
+                          <div className="w-4 h-4 rounded-full bg-[#2a2e39] flex items-center justify-center text-[7px] font-bold text-white shrink-0">
+                            {v.symbol.substring(0, 2)}
+                          </div>
+                          <div>
+                            <div className="text-[9px] text-[#d1d4dc] leading-none">{v.name}</div>
+                            <div className="text-[8px] text-[#787b86]">{v.symbol}</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[9px] font-bold bull">{v.pct}%</div>
+                          <div className="text-[8px] text-[#787b86]">{v.date}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* KEY LEVELS */}
+              <div className="border-b border-[#2a2e39]">
+                <div className="panel-header">
+                  <span className="panel-title">Key Levels</span>
+                  <span className="panel-link">View All →</span>
+                </div>
+                <div className="p-1">
+                  <div className="text-[9px] font-bold text-[#ef5350] mb-0.5 px-1">RESISTANCE</div>
+                  {[["R1", keyLevels.r1], ["R2", keyLevels.r2], ["R3", keyLevels.r3]].map(([k, v]) => (
+                    <div key={k as string} className="row-item">
+                      <span className="text-[9px] text-[#ef5350] font-mono font-bold">{k}</span>
+                      <span className="text-[9px] text-white font-mono">{formatCurrency(v as number)}</span>
+                    </div>
+                  ))}
+                  <div className="text-[9px] font-bold text-[#26a69a] mt-1 mb-0.5 px-1">SUPPORT</div>
+                  {[["S1", keyLevels.s1], ["S2", keyLevels.s2], ["S3", keyLevels.s3]].map(([k, v]) => (
+                    <div key={k as string} className="row-item">
+                      <span className="text-[9px] text-[#26a69a] font-mono font-bold">{k}</span>
+                      <span className="text-[9px] text-white font-mono">{formatCurrency(v as number)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* TOP GAINERS */}
+              <div className="border-b border-[#2a2e39]">
+                <div className="panel-header">
+                  <span className="panel-title">Top Gainers</span>
+                  <span className="panel-link">View All →</span>
+                </div>
+                {(movers?.gainers ?? []).slice(0, 5).map((t, i) => (
+                  <div key={t.symbol} className="row-item">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[#787b86] text-[9px] w-3">{i + 1}</span>
+                      <div className="w-4 h-4 rounded-full bg-[#2a2e39] flex items-center justify-center text-[7px] font-bold text-white">
+                        {t.symbol.substring(0, 2)}
+                      </div>
+                      <span className="text-[9px] font-medium text-white">{t.symbol}</span>
+                    </div>
+                    <span className="text-[9px] font-bold bull">+{t.priceChange24h?.toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* MARKET OVERVIEW */}
+              <div className="border-b border-[#2a2e39]">
+                <div className="panel-header">
+                  <span className="panel-title">Market Overview</span>
+                  <span className="panel-link text-[#ef5350]">✕</span>
+                </div>
+                <div className="p-1">
+                  {[
+                    { label: "Total Market Cap", value: formatCurrency(overview?.totalMarketCap), change: "+0.28%" },
+                    { label: "24h Volume", value: formatCurrency(overview?.totalVolume24h), change: null },
+                    { label: "BTC Dominance", value: `${overview?.btcDominance?.toFixed(1) ?? 58.2}%`, change: "-0.35%" },
+                    { label: "ETH Dominance", value: "10.1%", change: "+0.28%" },
+                  ].map(r => (
+                    <div key={r.label} className="row-item">
+                      <span className="text-[#787b86] text-[9px]">{r.label}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[9px] font-medium text-white">{r.value}</span>
+                        {r.change && (
+                          <span className={`text-[8px] ${r.change.startsWith("+") ? "bull" : "bear"}`}>{r.change}</span>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+              </div>
 
-        <div className="space-y-6">
-          <Card className="border-card-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                Latest Signals
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isNewsLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+              {/* TRENDING NARRATIVES */}
+              <div className="border-b border-[#2a2e39]">
+                <div className="panel-header">
+                  <span className="panel-title">Trending Narratives</span>
+                  <span className="panel-link">View All →</span>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {news?.map(item => (
-                    <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="block group">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className={`px-2 py-0.5 rounded-full font-bold ${
-                            item.sentiment === 'bullish' ? 'bg-primary/20 text-primary' :
-                            item.sentiment === 'bearish' ? 'bg-destructive/20 text-destructive' :
-                            'bg-secondary text-muted-foreground'
-                          }`}>
-                            {item.sentiment.toUpperCase()}
-                          </span>
-                          <span className="text-muted-foreground">{item.source}</span>
-                        </div>
-                        <h4 className="font-medium text-sm group-hover:text-primary transition-colors line-clamp-2">
-                          {item.title}
-                        </h4>
+                {topNarratives.map(n => (
+                  <div key={n.name} className="row-item">
+                    <div className="flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#2962ff]" />
+                      <span className="text-[9px] text-[#d1d4dc]">{n.name}</span>
+                    </div>
+                    <span className={`text-[9px] font-bold ${n.perf >= 0 ? "bull" : "bear"}`}>
+                      {n.perf >= 0 ? "+" : ""}{n.perf.toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* MARKET VIEW */}
+              <div className="border-b border-[#2a2e39]">
+                <div className="panel-header">
+                  <span className="panel-title">Market View</span>
+                  <span className="panel-link">View All →</span>
+                </div>
+                <div className="p-1.5 flex gap-3">
+                  <div className="flex-1 text-center">
+                    <div className="text-[9px] text-[#787b86] mb-0.5">Trending Up (70)</div>
+                    <div className="text-[22px] font-bold bull leading-none">210</div>
+                    <div className="text-[9px] bull">270%</div>
+                  </div>
+                  <div className="flex-1 text-center">
+                    <div className="text-[9px] text-[#787b86] mb-0.5">Trending Down (70)</div>
+                    <div className="text-[22px] font-bold bear leading-none">70</div>
+                    <div className="text-[9px] bear">70%</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* MEME COINS */}
+              <div>
+                <div className="panel-header">
+                  <span className="panel-title">Meme Coins</span>
+                  <span className="panel-link">View All →</span>
+                </div>
+                {MEME_COINS.map((m, i) => (
+                  <div key={m.symbol} className="row-item">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[#787b86] text-[9px] w-3">{i + 1}</span>
+                      <div className="w-4 h-4 rounded-full bg-[#2a2e39] flex items-center justify-center text-[7px] font-bold text-white">
+                        {m.symbol.substring(0, 2)}
                       </div>
-                    </a>
-                  ))}
+                      <span className="text-[9px] font-medium text-white">{m.symbol}</span>
+                    </div>
+                    <span className={`text-[9px] font-bold ${m.change >= 0 ? "bull" : "bear"}`}>
+                      {m.change >= 0 ? "+" : ""}{m.change}%
+                    </span>
+                  </div>
+                ))}
+                <div className="p-1.5 text-center">
+                  <span className="text-[9px] text-[#2962ff] cursor-pointer hover:underline">Explore All Meme Coins →</span>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+
+              {/* VESTING continued */}
+              <div className="border-t border-[#2a2e39]">
+                <div className="panel-header">
+                  <span className="panel-title">More Vesting</span>
+                  <span className="panel-link">View All Vesting Schedules →</span>
+                </div>
+                {VESTING.slice(8).map(v => (
+                  <div key={v.symbol} className="row-item">
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-4 rounded-full bg-[#2a2e39] flex items-center justify-center text-[7px] font-bold text-white shrink-0">
+                        {v.symbol.substring(0, 2)}
+                      </div>
+                      <span className="text-[9px] text-[#d1d4dc]">{v.name}</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[9px] font-bold bull">{v.pct}%</div>
+                      <div className="text-[8px] text-[#787b86]">{v.date}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  );
-}
-
-function MetricCard({ title, value, change, isCurrency, isLoading }: { title: string, value?: number, change?: number, isCurrency?: boolean, isLoading?: boolean }) {
-  return (
-    <Card className="border-card-border bg-card">
-      <CardContent className="p-6">
-        <h3 className="text-sm font-medium text-muted-foreground mb-2">{title}</h3>
-        {isLoading ? (
-          <Skeleton className="h-8 w-24 mb-1" />
-        ) : (
-          <div className="flex items-baseline gap-3">
-            <span className="text-2xl font-bold tracking-tight">
-              {isCurrency ? formatCurrency(value) : formatNumber(value)}
-            </span>
-            {change !== undefined && (
-              <span className={`text-sm font-bold flex items-center ${change >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                {change >= 0 ? <ArrowUpRight className="h-3 w-3 mr-0.5" /> : <ArrowDownRight className="h-3 w-3 mr-0.5" />}
-                {formatPercent(Math.abs(change))}
-              </span>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
