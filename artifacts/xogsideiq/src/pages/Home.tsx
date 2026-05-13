@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, Link } from "wouter";
 import {
   useGetToken, getGetTokenQueryKey,
@@ -23,6 +23,8 @@ import { formatCurrency, formatPercent, formatNumber } from "@/lib/format";
 import { GlobalTicker } from "@/components/global-ticker";
 import { NotificationCenter } from "@/components/notification-center";
 import { useTheme } from "@/components/theme-provider";
+import { useLiveCoins, useGainersLosers, useTrendingCoins, useFearGreedLive, useMemeCoinLive } from "@/hooks/use-market-data";
+import { analyzeToken, SIGNAL_COLOR, SIGNAL_BG, SENTIMENT_COLOR } from "@/lib/ai-engine";
 
 const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "D", "W", "M"];
 const TOKENS = ["BTC", "ETH", "SOL", "BNB", "MATIC", "ARB", "LINK", "RNDR", "FET"];
@@ -237,8 +239,33 @@ export default function Home() {
     s3: price * 0.855,
   };
 
-  const fg = overview?.fearGreedIndex ?? 48;
-  const fgLabel = overview?.fearGreedLabel ?? "Neutral";
+  // ── Real-time CoinGecko data ──────────────────────────────────────────────
+  const { data: cgCoins } = useLiveCoins();
+  const { gainers: cgGainers, losers: cgLosers } = useGainersLosers(7);
+  const { data: trendingData } = useTrendingCoins();
+  const { data: fearGreedData } = useFearGreedLive();
+  const liveMemeCoins = useMemeCoinLive();
+
+  // AI analysis for selected token (deterministic from real market data)
+  const aiAnalysis = useMemo(() => analyzeToken({
+    priceChange24h: token?.priceChange24h ?? 0,
+    priceChange7d: token?.priceChange7d ?? undefined,
+    volume24h: token?.volume24h ?? 0,
+    marketCap: token?.marketCap ?? 0,
+    price: token?.price ?? 0,
+    symbol: token?.symbol ?? symbol,
+  }), [token, symbol]);
+
+  // Trending coins list
+  const trendingCoins = useMemo(
+    () => (trendingData?.coins ?? []).slice(0, 7).map(c => c.item),
+    [trendingData]
+  );
+
+  // Real Fear & Greed (alternative.me) with fallback to backend
+  const fgLive = fearGreedData?.data?.[0];
+  const fg = fgLive ? parseInt(fgLive.value) : (overview?.fearGreedIndex ?? 48);
+  const fgLabel = fgLive ? fgLive.value_classification : (overview?.fearGreedLabel ?? "Neutral");
   const fgColor = fg < 25 ? "#ef5350" : fg < 45 ? "#f7931a" : fg < 55 ? "#787b86" : fg < 75 ? "#26a69a" : "#26a69a";
 
   const topNarratives = (narratives ?? []).slice(0, 7).map(n => ({
@@ -429,11 +456,17 @@ export default function Home() {
               </div>
               <div className="mt-1">
                 <div className="flex justify-between text-[8px] text-[#787b86] mb-0.5">
-                  <span>AI Confidence</span><span className="text-white font-bold">72%</span>
+                  <span>AI Confidence</span><span className="text-white font-bold">{aiAnalysis.confidence}%</span>
                 </div>
                 <div className="h-1.5 w-full rounded-full bg-[#2a2e39]">
-                  <div className="h-full w-[72%] rounded-full" style={{ background:"linear-gradient(90deg,#7c3aed,#2962ff)" }} />
+                  <div className="h-full rounded-full transition-all" style={{ width: `${aiAnalysis.confidence}%`, background:"linear-gradient(90deg,#7c3aed,#2962ff)" }} />
                 </div>
+              </div>
+              <div className="flex items-center justify-between mt-1 mb-0.5">
+                <span className="text-[8px] text-[#787b86]">AI Signal</span>
+                <span className="px-1.5 py-0.5 rounded text-[7px] font-bold" style={{ background: SIGNAL_BG[aiAnalysis.signal], color: SIGNAL_COLOR[aiAnalysis.signal], border: `1px solid ${SIGNAL_COLOR[aiAnalysis.signal]}50` }}>
+                  {aiAnalysis.signal.replace("_", " ")}
+                </span>
               </div>
               <div className="flex gap-1 mt-1">
                 {(token?.narratives?.slice(0,2) ?? [{ name:"Layer 1" }, { name:"DeFi" }]).map((n: { name: string }) => (
@@ -752,15 +785,16 @@ export default function Home() {
                       <span className="text-[#2962ff] cursor-pointer ml-1">CLICK FOR DETAILS →</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="w-20 h-20 rounded-full border-4 border-[#26a69a] flex flex-col items-center justify-center bg-[#26a69a]/10 shrink-0">
-                        <div className="text-[18px] font-bold text-white leading-none">60%</div>
-                        <div className="text-[8px] text-[#26a69a] font-bold">BUY</div>
+                      <div className="w-20 h-20 rounded-full border-4 flex flex-col items-center justify-center shrink-0 transition-all"
+                        style={{ borderColor: SIGNAL_COLOR[aiAnalysis.signal], backgroundColor: SIGNAL_BG[aiAnalysis.signal] }}>
+                        <div className="text-[18px] font-bold text-white leading-none">{aiAnalysis.bullishProbability}%</div>
+                        <div className="text-[8px] font-bold" style={{ color: SIGNAL_COLOR[aiAnalysis.signal] }}>{aiAnalysis.signal.replace("_", " ")}</div>
                       </div>
                       <div className="flex-1 space-y-1.5">
                         {[
-                          { label: "Buy", value: 60, color: "#26a69a" },
-                          { label: "Hold", value: 15, color: "#f7931a" },
-                          { label: "Sell", value: 25, color: "#ef5350" },
+                          { label: "Bull", value: aiAnalysis.bullishProbability, color: "#26a69a" },
+                          { label: "Hold", value: aiAnalysis.holdProbability, color: "#f7931a" },
+                          { label: "Bear", value: aiAnalysis.bearishProbability, color: "#ef5350" },
                         ].map(b => (
                           <div key={b.label}>
                             <div className="flex justify-between text-[9px] mb-0.5">
@@ -768,11 +802,11 @@ export default function Home() {
                               <span className="text-white font-medium">{b.value}%</span>
                             </div>
                             <div className="h-1.5 rounded-full bg-[#2a2e39]">
-                              <div className="h-full rounded-full" style={{ width: `${b.value}%`, backgroundColor: b.color }} />
+                              <div className="h-full rounded-full transition-all" style={{ width: `${b.value}%`, backgroundColor: b.color }} />
                             </div>
                           </div>
                         ))}
-                        <div className="text-[9px] text-[#787b86]">AI Confidence: <span className="text-white">50%</span></div>
+                        <div className="text-[9px] text-[#787b86]">AI Confidence: <span className="text-white">{aiAnalysis.confidence}%</span></div>
                       </div>
                     </div>
                   </div>
@@ -784,24 +818,27 @@ export default function Home() {
                       <span className="text-[#2962ff] cursor-pointer ml-1">CLICK FOR DETAILS →</span>
                     </div>
                     <div className="grid grid-cols-4 gap-2 mb-2">
-                      {[
-                        { tf: "3H", sentiment: "Neutral", conf: 55, color: "#787b86" },
-                        { tf: "4H", sentiment: "Neutral", conf: 52, color: "#787b86" },
-                        { tf: "1D", sentiment: "Neutral", conf: 45, color: "#787b86" },
-                        { tf: "1W", sentiment: "Neutral", conf: 40, color: "#787b86" },
-                      ].map(t => (
-                        <div key={t.tf} className="border border-[#2a2e39] rounded p-1.5 text-center">
-                          <div className="text-[8px] text-[#787b86] font-bold mb-0.5">{t.tf}</div>
-                          <div className="text-[9px] font-bold" style={{ color: t.color }}>— {t.sentiment}</div>
-                          <div className="h-1 rounded-full bg-[#2a2e39] mt-1">
-                            <div className="h-full rounded-full" style={{ width: `${t.conf}%`, backgroundColor: t.color }} />
+                      {aiAnalysis.timeframes.map(t => {
+                        const tColor = t.sentiment === "BULLISH" ? "#26a69a" : t.sentiment === "BEARISH" ? "#ef5350" : "#787b86";
+                        return (
+                          <div key={t.tf} className="border border-[#2a2e39] rounded p-1.5 text-center">
+                            <div className="text-[8px] text-[#787b86] font-bold mb-0.5">{t.tf}</div>
+                            <div className="text-[9px] font-bold" style={{ color: tColor }}>{t.sentiment}</div>
+                            <div className="h-1 rounded-full bg-[#2a2e39] mt-1">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${t.confidence}%`, backgroundColor: tColor }} />
+                            </div>
+                            <div className="text-[8px] text-[#787b86] mt-0.5">{t.confidence}% conf</div>
                           </div>
-                          <div className="text-[8px] text-[#787b86] mt-0.5">{t.conf}% conf</div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     <div className="text-[9px] text-[#787b86] leading-relaxed">
-                      AI predicts neutral trend for {token?.name ?? symbol} on daily timeframe with 45% confidence based on multi-factor technical + on-chain analysis.
+                      AI signals{" "}
+                      <span className="font-semibold" style={{ color: SENTIMENT_COLOR[aiAnalysis.sentiment] }}>
+                        {aiAnalysis.sentiment.replace(/_/g, " ")}
+                      </span>
+                      {" "}for {token?.name ?? symbol} on daily timeframe with{" "}
+                      <span className="text-white">{aiAnalysis.confidence}%</span> confidence based on multi-factor technical + on-chain analysis.
                     </div>
                   </div>
 
@@ -1063,27 +1100,62 @@ export default function Home() {
               {/* AI INSIGHTS + VESTING SCHEDULES */}
               <div className="flex border-b border-[#2a2e39]">
 
-                {/* AI INSIGHTS */}
+                {/* AI ENGINE */}
                 <div className="flex-1 border-r border-[#2a2e39]">
                   <div className="panel-header">
-                    <span className="panel-title">AI Insights</span>
-                    <span className="panel-link">View All →</span>
+                    <span className="panel-title flex items-center gap-1">
+                      <Cpu className="h-2.5 w-2.5 text-[#2962ff]" />
+                      AI Engine
+                    </span>
+                    <span className="panel-link">Details →</span>
                   </div>
-                  <div className="p-1.5">
-                    <div className="flex gap-1 mb-1">
-                      {["1d", "4d"].map(t => (
-                        <button key={t} className="px-1.5 h-4 rounded text-[8px] bg-[#2962ff]/20 text-[#2962ff] border border-[#2962ff]/40">{t}</button>
-                      ))}
-                      <span className="ml-1 px-1.5 h-4 rounded text-[8px] bg-[#787b86]/20 text-[#787b86] border border-[#787b86]/40 flex items-center">Neutral</span>
+                  <div className="p-1.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] text-[#787b86]">Signal</span>
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-bold" style={{ background: SIGNAL_BG[aiAnalysis.signal], color: SIGNAL_COLOR[aiAnalysis.signal], border: `1px solid ${SIGNAL_COLOR[aiAnalysis.signal]}60` }}>
+                        {aiAnalysis.signal.replace(/_/g, " ")}
+                      </span>
                     </div>
-                    <div className="text-[9px] text-[#d1d4dc] leading-relaxed mb-1">
-                      Strong neutral momentum with 50% confidence based on technical analysis.
+                    <div>
+                      <div className="flex justify-between text-[8px] mb-0.5">
+                        <span className="bull">Bull {aiAnalysis.bullishProbability}%</span>
+                        <span className="bear">Bear {aiAnalysis.bearishProbability}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(239,83,80,0.15)" }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${aiAnalysis.bullishProbability}%`, background: "linear-gradient(90deg,#26a69a,#4ade80)" }} />
+                      </div>
                     </div>
-                    <div className="text-[9px] text-[#787b86] mb-0.5">Confidence</div>
-                    <div className="h-1.5 rounded-full bg-[#2a2e39] mb-1">
-                      <div className="h-full rounded-full bg-[#2962ff]" style={{ width: "50%" }} />
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] text-[#787b86]">Smart $</span>
+                      <span className={`text-[8px] font-bold ${aiAnalysis.smartMoney === "ACCUMULATING" ? "bull" : aiAnalysis.smartMoney === "DISTRIBUTING" ? "bear" : "text-[#787b86]"}`}>
+                        {aiAnalysis.smartMoney}
+                      </span>
                     </div>
-                    <div className="text-right text-[8px] text-[#2962ff]">50%</div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] text-[#787b86]">Whale</span>
+                      <span className={`text-[8px] font-bold ${aiAnalysis.whaleActivity === "EXTREME" ? "bear" : aiAnalysis.whaleActivity === "HIGH" ? "text-[#f7931a]" : "text-[#787b86]"}`}>
+                        {aiAnalysis.whaleActivity}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] text-[#787b86]">Momentum</span>
+                      <span className={`text-[8px] font-mono font-bold ${aiAnalysis.momentumScore >= 0 ? "bull" : "bear"}`}>
+                        {aiAnalysis.momentumScore >= 0 ? "+" : ""}{aiAnalysis.momentumScore}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] text-[#787b86]">Narrative</span>
+                      <span className="text-[8px] font-mono text-white">{aiAnalysis.narrativeStrength}%</span>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-[8px] mb-0.5">
+                        <span className="text-[#787b86]">AI Confidence</span>
+                        <span className="text-[#2962ff] font-bold">{aiAnalysis.confidence}%</span>
+                      </div>
+                      <div className="h-1 rounded-full bg-[#2a2e39]">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${aiAnalysis.confidence}%`, background: "linear-gradient(90deg,#7c3aed,#2962ff)" }} />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1142,21 +1214,98 @@ export default function Home() {
               {/* TOP GAINERS */}
               <div className="border-b border-[#2a2e39]">
                 <div className="panel-header">
-                  <span className="panel-title">Top Gainers</span>
+                  <span className="panel-title flex items-center gap-1">
+                    <ArrowUpRight className="h-2.5 w-2.5 bull" />
+                    Top Gainers <span className="text-[7px] text-[#26a69a] font-normal ml-0.5">LIVE</span>
+                  </span>
                   <span className="panel-link">View All →</span>
                 </div>
-                {(movers?.gainers ?? []).slice(0, 5).map((t, i) => (
-                  <div key={t.symbol} className="row-item">
+                {(cgGainers.length > 0 ? cgGainers : (movers?.gainers ?? [])).slice(0, 5).map((t: any, i: number) => (
+                  <div key={t.id ?? t.symbol} className="row-item cursor-pointer hover:bg-[#2a2e39]/50 transition-colors">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[#787b86] text-[9px] w-3">{i + 1}</span>
-                      <div className="w-4 h-4 rounded-full bg-[#2a2e39] flex items-center justify-center text-[7px] font-bold text-white">
-                        {t.symbol.substring(0, 2)}
+                      {t.image ? (
+                        <img src={t.image} alt={t.symbol} className="w-4 h-4 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full bg-[#2a2e39] flex items-center justify-center text-[7px] font-bold text-white shrink-0">
+                          {(t.symbol ?? "").substring(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-[9px] font-medium text-white leading-none">{(t.symbol ?? "").toUpperCase()}</div>
+                        <div className="text-[7px] text-[#787b86] truncate max-w-[60px]">{t.name ?? ""}</div>
                       </div>
-                      <span className="text-[9px] font-medium text-white">{t.symbol}</span>
                     </div>
-                    <span className="text-[9px] font-bold bull">+{t.priceChange24h?.toFixed(1)}%</span>
+                    <div className="text-right shrink-0">
+                      <div className="text-[9px] font-bold bull">+{((t.price_change_percentage_24h ?? t.priceChange24h) ?? 0).toFixed(2)}%</div>
+                      {t.current_price && <div className="text-[7px] text-[#787b86]">{formatCurrency(t.current_price)}</div>}
+                    </div>
                   </div>
                 ))}
+              </div>
+
+              {/* TOP LOSERS */}
+              <div className="border-b border-[#2a2e39]">
+                <div className="panel-header">
+                  <span className="panel-title flex items-center gap-1">
+                    <ArrowDownRight className="h-2.5 w-2.5 bear" />
+                    Top Losers <span className="text-[7px] text-[#ef5350] font-normal ml-0.5">LIVE</span>
+                  </span>
+                  <span className="panel-link">View All →</span>
+                </div>
+                {cgLosers.slice(0, 5).map((t, i) => (
+                  <div key={t.id} className="row-item cursor-pointer hover:bg-[#2a2e39]/50 transition-colors">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[#787b86] text-[9px] w-3">{i + 1}</span>
+                      {t.image ? (
+                        <img src={t.image} alt={t.symbol} className="w-4 h-4 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full bg-[#2a2e39] flex items-center justify-center text-[7px] font-bold text-white shrink-0">
+                          {t.symbol.substring(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-[9px] font-medium text-white leading-none">{t.symbol.toUpperCase()}</div>
+                        <div className="text-[7px] text-[#787b86] truncate max-w-[60px]">{t.name}</div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[9px] font-bold bear">{t.price_change_percentage_24h.toFixed(2)}%</div>
+                      <div className="text-[7px] text-[#787b86]">{formatCurrency(t.current_price)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* TRENDING COINS */}
+              <div className="border-b border-[#2a2e39]">
+                <div className="panel-header">
+                  <span className="panel-title flex items-center gap-1">
+                    <TrendingUp className="h-2.5 w-2.5 text-[#f7931a]" />
+                    Trending
+                  </span>
+                  <span className="panel-link">View All →</span>
+                </div>
+                {trendingCoins.length > 0 ? trendingCoins.slice(0, 5).map((t, i) => (
+                  <div key={t.id} className="row-item cursor-pointer hover:bg-[#2a2e39]/50 transition-colors">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[#787b86] text-[9px] w-3">{i + 1}</span>
+                      <img src={t.thumb} alt={t.symbol} className="w-4 h-4 rounded-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      <div className="min-w-0">
+                        <div className="text-[9px] font-medium text-white leading-none truncate max-w-[70px]">{t.symbol}</div>
+                        <div className="text-[7px] text-[#787b86] truncate max-w-[70px]">{t.name}</div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className={`text-[9px] font-bold ${(t.data?.price_change_percentage_24h?.usd ?? 0) >= 0 ? "bull" : "bear"}`}>
+                        {(t.data?.price_change_percentage_24h?.usd ?? 0) >= 0 ? "+" : ""}{(t.data?.price_change_percentage_24h?.usd ?? 0).toFixed(2)}%
+                      </div>
+                      <div className="text-[7px] text-[#787b86]">#{t.market_cap_rank}</div>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="px-2 py-3 text-center text-[9px] text-[#787b86]">Loading trending...</div>
+                )}
               </div>
 
               {/* MARKET OVERVIEW */}
@@ -1183,6 +1332,42 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* AI OPPORTUNITIES */}
+              <div className="border-b border-[#2a2e39]">
+                <div className="panel-header">
+                  <span className="panel-title flex items-center gap-1">
+                    <Brain className="h-2.5 w-2.5 text-[#7c3aed]" />
+                    AI Opportunities
+                    <span className="px-1 py-0.5 rounded text-[7px] font-bold bg-[#7c3aed] text-white ml-0.5">PRO</span>
+                  </span>
+                  <span className="panel-link">View All →</span>
+                </div>
+                {(cgCoins?.slice(0, 30) ?? []).map(c => ({
+                  ...c,
+                  ai: analyzeToken({ priceChange24h: c.price_change_percentage_24h, priceChange7d: c.price_change_percentage_7d_in_currency ?? undefined, volume24h: c.total_volume, marketCap: c.market_cap, symbol: c.symbol }),
+                })).filter(c => c.ai.signal === "STRONG_BUY" || c.ai.signal === "BUY").slice(0, 4).map((c, i) => (
+                  <div key={c.id} className="row-item cursor-pointer hover:bg-[#2a2e39]/50 transition-colors">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[#787b86] text-[9px] w-3">{i + 1}</span>
+                      {c.image && <img src={c.image} alt={c.symbol} className="w-4 h-4 rounded-full object-cover" />}
+                      <div className="min-w-0">
+                        <div className="text-[9px] font-medium text-white leading-none">{c.symbol.toUpperCase()}</div>
+                        <div className="text-[7px] text-[#787b86] truncate max-w-[55px]">{c.name}</div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="px-1 py-0.5 rounded text-[7px] font-bold block mb-0.5" style={{ background: SIGNAL_BG[c.ai.signal], color: SIGNAL_COLOR[c.ai.signal] }}>
+                        {c.ai.signal.replace(/_/g, " ")}
+                      </span>
+                      <div className="text-[7px] text-[#787b86]">{c.ai.confidence}% conf</div>
+                    </div>
+                  </div>
+                ))}
+                {(cgCoins?.length ?? 0) === 0 && (
+                  <div className="px-2 py-3 text-center text-[9px] text-[#787b86]">Loading signals...</div>
+                )}
               </div>
 
               {/* TRENDING NARRATIVES */}
@@ -1227,20 +1412,33 @@ export default function Home() {
               {/* MEME COINS */}
               <div>
                 <div className="panel-header">
-                  <span className="panel-title">Meme Coins</span>
+                  <span className="panel-title flex items-center gap-1">
+                    <Laugh className="h-2.5 w-2.5 text-[#f7931a]" />
+                    Meme Coins <span className="text-[7px] text-[#f7931a] font-normal ml-0.5">LIVE</span>
+                  </span>
                   <span className="panel-link">View All →</span>
                 </div>
-                {MEME_COINS.map((m, i) => (
-                  <div key={m.symbol} className="row-item">
+                {(liveMemeCoins.length > 0
+                  ? liveMemeCoins.map(m => ({ symbol: m.symbol.toUpperCase(), name: m.name, change: m.price_change_percentage_24h, price: m.current_price, image: m.image }))
+                  : MEME_COINS.map(m => ({ symbol: m.symbol, name: m.symbol, change: m.change, price: 0, image: undefined as string | undefined }))
+                ).map((m, i) => (
+                  <div key={m.symbol} className="row-item cursor-pointer hover:bg-[#2a2e39]/50 transition-colors">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[#787b86] text-[9px] w-3">{i + 1}</span>
-                      <div className="w-4 h-4 rounded-full bg-[#2a2e39] flex items-center justify-center text-[7px] font-bold text-white">
-                        {m.symbol.substring(0, 2)}
+                      {m.image ? (
+                        <img src={m.image} alt={m.symbol} className="w-4 h-4 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full bg-[#2a2e39] flex items-center justify-center text-[7px] font-bold text-white shrink-0">
+                          {m.symbol.substring(0, 2)}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-[9px] font-medium text-white leading-none">{m.symbol}</div>
+                        {m.price > 0 && <div className="text-[7px] text-[#787b86]">{formatCurrency(m.price)}</div>}
                       </div>
-                      <span className="text-[9px] font-medium text-white">{m.symbol}</span>
                     </div>
                     <span className={`text-[9px] font-bold ${m.change >= 0 ? "bull" : "bear"}`}>
-                      {m.change >= 0 ? "+" : ""}{m.change}%
+                      {m.change >= 0 ? "+" : ""}{m.change.toFixed(2)}%
                     </span>
                   </div>
                 ))}

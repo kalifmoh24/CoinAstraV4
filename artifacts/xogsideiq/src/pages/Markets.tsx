@@ -464,7 +464,7 @@ export default function Markets() {
   const { data:coins, isLoading, isError, error, dataUpdatedAt, refetch } = useQuery({
     queryKey: ["cg-markets", page],
     queryFn: () => fetchMarkets(page),
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
     staleTime: 25_000,
     retry: 2,
   });
@@ -723,7 +723,7 @@ export default function Markets() {
                 style={{ background:"linear-gradient(135deg,#2962ff,#7c3aed)", boxShadow:"0 0 12px rgba(41,98,255,0.4)" }}>
                 <Activity size={15} className="text-white" />
               </div>
-              <span className="text-white font-black text-[13px] tracking-tight">XogsideIQ</span>
+              <span className="text-white font-black text-[13px] tracking-tight">CoinAstra</span>
             </Link>
             <nav className="flex items-center gap-0.5">
               {NAV.map(item => {
@@ -984,7 +984,7 @@ export default function Markets() {
               style={{ background:"linear-gradient(135deg,#2962ff 0%,#7c3aed 100%)", boxShadow:"0 0 12px rgba(41,98,255,0.4)" }}>
               <Activity size={14} className="text-white" />
             </div>
-            <span className="text-white font-black text-sm tracking-tight">XogsideIQ</span>
+            <span className="text-white font-black text-sm tracking-tight">CoinAstra</span>
           </Link>
           <nav className="flex items-center gap-0.5">
             {NAV.map(item => {

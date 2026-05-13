@@ -35,7 +35,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             style={{ background: "linear-gradient(135deg,#2962ff,#7c3aed)", boxShadow: "0 0 10px rgba(41,98,255,0.35)" }}>
             <Activity className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="hidden sm:inline">XogsideIQ</span>
+          <span className="hidden sm:inline">CoinAstra</span>
         </Link>
 
         {/* Desktop nav */}
@@ -66,7 +66,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="text-xs font-bold text-foreground truncate">
             {NAV_ITEMS.find(n =>
               location === n.path || (n.path !== "/" && location.startsWith(n.path))
-            )?.label ?? "XogsideIQ"}
+            )?.label ?? "CoinAstra"}
           </span>
         </div>
 
