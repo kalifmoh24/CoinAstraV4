@@ -276,101 +276,103 @@ export function DesktopDashboard() {
   return (
     <div className="min-h-full" style={{ background: isDark ? "#070a12" : "#f0f2f7", color: isDark ? "#d1d4dc" : "#1e222d" }}>
       {/* ══════════════════════════════════════════════════════════════════
-          SECTION 1: HERO AI COMMAND CENTER
+          SECTION 1: COMPACT AI COMMAND CENTER
       ══════════════════════════════════════════════════════════════════ */}
-      <div className="px-6 pt-5 pb-4">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          className="rounded-3xl p-6 relative overflow-hidden"
+      <div className="px-6 pt-4 pb-3">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl px-5 py-3.5 relative overflow-hidden"
           style={{
-            background: "linear-gradient(135deg, rgba(41,98,255,0.13) 0%, rgba(124,58,237,0.10) 40%, rgba(16,185,129,0.07) 100%)",
-            border: "1px solid rgba(41,98,255,0.22)",
-            boxShadow: "0 8px 60px rgba(41,98,255,0.12), inset 0 1px 0 rgba(255,255,255,0.05)",
+            background: "linear-gradient(135deg, rgba(41,98,255,0.10) 0%, rgba(124,58,237,0.08) 50%, rgba(16,185,129,0.06) 100%)",
+            border: "1px solid rgba(41,98,255,0.18)",
+            boxShadow: "0 4px 32px rgba(41,98,255,0.08)",
           }}>
-          {/* Background glow orbs */}
-          <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full opacity-10 pointer-events-none"
+          <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full opacity-8 pointer-events-none"
             style={{ background: "radial-gradient(circle, #7c3aed, transparent)" }} />
-          <div className="absolute -bottom-12 -left-12 w-48 h-48 rounded-full opacity-8 pointer-events-none"
-            style={{ background: "radial-gradient(circle, #2962ff, transparent)" }} />
 
-          <div className="relative z-10 flex gap-8">
-            {/* Left: AI Gauge + Sentiment */}
-            <div className="flex flex-col items-center gap-3 shrink-0">
-              <ArcGauge value={btcAi.bullishProbability} color="#26a69a" label="Bullish Score" size={130} />
-              <div className="text-center">
-                <div className="text-[11px] font-black uppercase tracking-wider mb-1" style={{ color: "#a78bfa" }}>AI Sentiment</div>
-                <div className="text-[16px] font-black" style={{ color: btcAi.bullishProbability >= 60 ? "#26a69a" : btcAi.bullishProbability >= 40 ? "#f7931a" : "#ef5350" }}>
+          <div className="relative z-10 flex items-center gap-5">
+            {/* Compact gauge */}
+            <div className="flex items-center gap-3 shrink-0">
+              <ArcGauge value={btcAi.bullishProbability} color="#26a69a" label="Bullish" size={90} />
+              <div>
+                <div className="text-[8px] font-black uppercase tracking-wider" style={{ color: "#a78bfa" }}>AI Sentiment</div>
+                <div className="text-[13px] font-black leading-tight" style={{ color: btcAi.bullishProbability >= 60 ? "#26a69a" : btcAi.bullishProbability >= 40 ? "#f7931a" : "#ef5350" }}>
                   {btcAi.sentiment.replace(/_/g, " ")}
                 </div>
               </div>
             </div>
 
-            {/* Center: Metrics + TF breakdown */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-2xl flex items-center justify-center"
-                  style={{ background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.35)" }}>
-                  <Brain size={17} style={{ color: "#a78bfa" }} />
+            {/* Divider */}
+            <div className="w-px self-stretch" style={{ background: "rgba(255,255,255,0.07)" }} />
+
+            {/* Title + bull/bear */}
+            <div className="shrink-0 w-52">
+              <div className="flex items-center gap-2 mb-1.5">
+                <div className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background: "rgba(124,58,237,0.2)" }}>
+                  <Brain size={12} style={{ color: "#a78bfa" }} />
                 </div>
-                <div>
-                  <div className="text-[17px] font-black text-white">AI Command Center</div>
-                  <div className="text-[10px]" style={{ color: "#4a5268" }}>500+ tokens analyzed · Real-time intelligence</div>
-                </div>
-                <span className="ml-auto px-3 py-1 rounded-xl text-[10px] font-black"
+                <span className="text-[13px] font-black text-white">AI Command Center</span>
+                <span className="ml-auto text-[8px] font-black px-2 py-0.5 rounded-lg"
                   style={{ background: SIGNAL_BG[btcAi.signal] ?? "rgba(90,96,114,0.15)", color: SIGNAL_COLOR[btcAi.signal] ?? "#787b86" }}>
                   BTC {btcAi.signal.replace(/_/g, " ")}
                 </span>
               </div>
-
-              {/* Bull/Bear bar */}
-              <div className="mb-4">
-                <div className="flex justify-between text-[10px] mb-1.5">
-                  <span style={{ color: "#26a69a" }}>Bullish {btcAi.bullishProbability}%</span>
-                  <span style={{ color: "#ef5350" }}>Bearish {btcAi.bearishProbability}%</span>
-                </div>
-                <div className="h-2.5 rounded-full overflow-hidden flex" style={{ background: "rgba(239,83,80,0.2)" }}>
-                  <motion.div className="h-full rounded-l-full"
-                    initial={{ width: 0 }} animate={{ width: `${btcAi.bullishProbability}%` }}
-                    transition={{ duration: 1.2, ease: "easeOut" }}
-                    style={{ background: "linear-gradient(90deg, #26a69a, #4ade80)" }} />
-                </div>
+              <div className="flex justify-between text-[9px] mb-1">
+                <span style={{ color: "#26a69a" }}>Bull {btcAi.bullishProbability}%</span>
+                <span style={{ color: "#ef5350" }}>Bear {btcAi.bearishProbability}%</span>
               </div>
-
-              {/* 6 metric cards */}
-              <div className="grid grid-cols-3 xl:grid-cols-6 gap-2 mb-4">
-                {[
-                  { label: "Smart Money", value: btcAi.smartMoney === "ACCUMULATING" ? "ACCUM" : btcAi.smartMoney === "DISTRIBUTING" ? "DIST" : "NEUT", color: btcAi.smartMoney === "ACCUMULATING" ? "#26a69a" : btcAi.smartMoney === "DISTRIBUTING" ? "#ef5350" : "#787b86" },
-                  { label: "Whale Activity", value: btcAi.whaleActivity, color: btcAi.whaleActivity === "HIGH" || btcAi.whaleActivity === "EXTREME" ? "#f7931a" : "#787b86" },
-                  { label: "Momentum", value: `${btcAi.momentumScore > 0 ? "+" : ""}${btcAi.momentumScore}`, color: btcAi.momentumScore >= 0 ? "#26a69a" : "#ef5350" },
-                  { label: "AI Confidence", value: `${btcAi.confidence}%`, color: "#a78bfa" },
-                  { label: "Narrative Str.", value: `${btcAi.narrativeStrength}%`, color: "#f7931a" },
-                  { label: "Market Signal", value: btcAi.signal.replace(/_/g, " "), color: SIGNAL_COLOR[btcAi.signal] },
-                ].map(m => (
-                  <div key={m.label} className="rounded-xl p-2.5 text-center"
-                    style={{ background: "rgba(0,0,0,0.28)", border: `1px solid ${m.color}18` }}>
-                    <div className="text-[8px] uppercase tracking-wide mb-1" style={{ color: "#3a4058" }}>{m.label}</div>
-                    <div className="text-[11px] font-black" style={{ color: m.color }}>{m.value}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Timeframe breakdown */}
-              <div className="flex gap-2">
-                {btcAi.timeframes.map(t => {
-                  const tc = t.sentiment === "BULLISH" ? "#26a69a" : t.sentiment === "BEARISH" ? "#ef5350" : "#5a6072";
-                  return (
-                    <div key={t.tf} className="flex-1 rounded-xl p-2.5 text-center"
-                      style={{ background: "rgba(0,0,0,0.3)", border: `1px solid ${tc}20` }}>
-                      <div className="text-[9px] font-bold mb-1" style={{ color: "#3a4058" }}>{t.tf}</div>
-                      <div className="text-[10px] font-black" style={{ color: tc }}>{t.sentiment.slice(0, 4)}</div>
-                      <div className="text-[8px] mt-0.5" style={{ color: "#3a4058" }}>{t.confidence}%</div>
-                    </div>
-                  );
-                })}
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(239,83,80,0.18)" }}>
+                <motion.div className="h-full rounded-l-full"
+                  initial={{ width: 0 }} animate={{ width: `${btcAi.bullishProbability}%` }}
+                  transition={{ duration: 1.1, ease: "easeOut" }}
+                  style={{ background: "linear-gradient(90deg, #26a69a, #4ade80)" }} />
               </div>
             </div>
 
-            {/* Right: Live price cards + actions */}
-            <div className="shrink-0 w-52 flex flex-col gap-3">
+            {/* Divider */}
+            <div className="w-px self-stretch" style={{ background: "rgba(255,255,255,0.07)" }} />
+
+            {/* 6 mini metrics in a row */}
+            <div className="flex-1 grid grid-cols-6 gap-2">
+              {[
+                { label: "Smart $", value: btcAi.smartMoney === "ACCUMULATING" ? "ACCUM" : btcAi.smartMoney === "DISTRIBUTING" ? "DIST" : "NEUT", color: btcAi.smartMoney === "ACCUMULATING" ? "#26a69a" : btcAi.smartMoney === "DISTRIBUTING" ? "#ef5350" : "#787b86" },
+                { label: "Whale", value: btcAi.whaleActivity, color: btcAi.whaleActivity === "HIGH" || btcAi.whaleActivity === "EXTREME" ? "#f7931a" : "#787b86" },
+                { label: "Momentum", value: `${btcAi.momentumScore > 0 ? "+" : ""}${btcAi.momentumScore}`, color: btcAi.momentumScore >= 0 ? "#26a69a" : "#ef5350" },
+                { label: "Confidence", value: `${btcAi.confidence}%`, color: "#a78bfa" },
+                { label: "Narrative", value: `${btcAi.narrativeStrength}%`, color: "#f7931a" },
+                { label: "Signal", value: btcAi.signal.replace(/_/g, " "), color: SIGNAL_COLOR[btcAi.signal] ?? "#787b86" },
+              ].map(m => (
+                <div key={m.label} className="rounded-xl py-2 px-2 text-center"
+                  style={{ background: "rgba(0,0,0,0.25)", border: `1px solid ${m.color}14` }}>
+                  <div className="text-[7px] uppercase tracking-wide mb-0.5" style={{ color: "#2a3050" }}>{m.label}</div>
+                  <div className="text-[10px] font-black leading-tight" style={{ color: m.color }}>{m.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Divider */}
+            <div className="w-px self-stretch" style={{ background: "rgba(255,255,255,0.07)" }} />
+
+            {/* TF breakdown compact */}
+            <div className="flex gap-1.5 shrink-0">
+              {btcAi.timeframes.map(t => {
+                const tc = t.sentiment === "BULLISH" ? "#26a69a" : t.sentiment === "BEARISH" ? "#ef5350" : "#5a6072";
+                return (
+                  <div key={t.tf} className="rounded-xl px-2.5 py-2 text-center"
+                    style={{ background: "rgba(0,0,0,0.3)", border: `1px solid ${tc}18`, minWidth: 44 }}>
+                    <div className="text-[8px] font-bold" style={{ color: "#2a3050" }}>{t.tf}</div>
+                    <div className="text-[9px] font-black" style={{ color: tc }}>{t.sentiment.slice(0, 4)}</div>
+                    <div className="text-[7px]" style={{ color: "#2a3050" }}>{t.confidence}%</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Divider */}
+            <div className="w-px self-stretch" style={{ background: "rgba(255,255,255,0.07)" }} />
+
+            {/* Live prices + action */}
+            <div className="shrink-0 flex flex-col gap-1.5">
               {[
                 { label: "BTC", coin: btcCoin, fallPrice: 67482, fallCh: 2.4, color: "#f7931a" },
                 { label: "ETH", coin: ethCoin, fallPrice: 3248, fallCh: 1.8, color: "#627EEA" },
@@ -379,40 +381,21 @@ export function DesktopDashboard() {
                 const price = p.coin?.current_price ?? p.fallPrice;
                 const ch = p.coin?.price_change_percentage_24h ?? p.fallCh;
                 return (
-                  <div key={p.label} className="rounded-2xl px-3 py-2.5 flex items-center gap-3"
-                    style={{ background: "rgba(0,0,0,0.3)", border: `1px solid ${p.color}18` }}>
-                    <div className="w-7 h-7 rounded-xl flex items-center justify-center font-black text-[10px] shrink-0"
-                      style={{ background: `${p.color}18`, color: p.color }}>{p.label}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-black text-white font-mono">{fmtP(price)}</div>
-                      <div className="text-[10px] font-bold" style={{ color: ch >= 0 ? "#26a69a" : "#ef5350" }}>
-                        {ch >= 0 ? "+" : ""}{ch.toFixed(2)}%
-                      </div>
-                    </div>
-                    <Pulse color={p.color} size={5} />
+                  <div key={p.label} className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl"
+                    style={{ background: "rgba(0,0,0,0.28)", border: `1px solid ${p.color}14` }}>
+                    <span className="text-[8px] font-black w-6 shrink-0" style={{ color: p.color }}>{p.label}</span>
+                    <span className="text-[10px] font-black text-white font-mono">{fmtP(price)}</span>
+                    <span className="text-[8px] font-bold ml-1" style={{ color: ch >= 0 ? "#26a69a" : "#ef5350" }}>
+                      {ch >= 0 ? "+" : ""}{ch.toFixed(1)}%
+                    </span>
+                    <Pulse color={p.color} size={4} />
                   </div>
                 );
               })}
-              {/* Action buttons */}
-              <div className="grid grid-cols-2 gap-1.5 mt-1">
-                {[
-                  { label: "BUY", color: "#26a69a", link: "/signals" },
-                  { label: "HOLD", color: "#f7931a", link: "/signals" },
-                  { label: "RISK", color: "#ef5350", link: "/alerts" },
-                  { label: "BREAKOUT", color: "#7c3aed", link: "/screener" },
-                ].map(b => (
-                  <Link key={b.label} href={b.link}>
-                    <button className="w-full py-1.5 rounded-xl text-[9px] font-black transition-all hover:opacity-80 active:scale-95"
-                      style={{ background: `${b.color}18`, color: b.color, border: `1px solid ${b.color}30` }}>
-                      {b.label}
-                    </button>
-                  </Link>
-                ))}
-              </div>
               <Link href="/ai-insights">
-                <button className="w-full py-2 rounded-xl text-[10px] font-black transition-all active:scale-95 mt-1"
-                  style={{ background: "linear-gradient(135deg,#2962ff,#7c3aed)", color: "white", boxShadow: "0 4px 16px rgba(41,98,255,0.3)" }}>
-                  Open AI Terminal →
+                <button className="w-full py-1.5 rounded-xl text-[9px] font-black transition-all hover:opacity-90 mt-0.5"
+                  style={{ background: "linear-gradient(135deg,#2962ff,#7c3aed)", color: "white" }}>
+                  AI Terminal →
                 </button>
               </Link>
             </div>
@@ -421,37 +404,46 @@ export function DesktopDashboard() {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════
-          SECTION 2: GLOBAL MARKET OVERVIEW
+          SECTION 2: GLOBAL MARKET OVERVIEW — compact icon cards
       ══════════════════════════════════════════════════════════════════ */}
-      <div className="px-6 pb-5">
+      <div className="px-6 pb-4">
         <SectionLabel title="Global Market Overview" icon={Globe} color="#2962ff" />
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-5 xl:grid-cols-10 gap-2">
           {[
-            { label: "Total Market Cap", value: fmtL(overview?.totalMarketCap ?? 2_780_000_000_000), sub: "↑ +0.3% 24h", color: "#2962ff", icon: Globe },
-            { label: "24h Volume", value: fmtL(overview?.totalVolume24h ?? 96_000_000_000), sub: "3.4% of MCap", color: "#26a69a", icon: BarChart2 },
-            { label: "BTC Dominance", value: `${overview?.btcDominance?.toFixed(1) ?? "58.3"}%`, sub: "↑ Trending up", color: "#f7931a", icon: Activity },
-            { label: "Fear & Greed", value: `${fgVal} · ${fgLabel}`, sub: "Historical: 38", color: fgColor, icon: Shield },
-            { label: "ETH Gas", value: "18 Gwei", sub: "Normal · 15 TPS", color: "#627EEA", icon: Zap },
-            { label: "Stablecoin Flow", value: "+$2.8B", sub: "Net inflow 24h", color: "#26a69a", icon: ArrowRightLeft },
-            { label: "Open Interest", value: "$28.4B", sub: "Perpetuals", color: "#7c3aed", icon: Target },
-            { label: "Trending Chain", value: "Solana", sub: "+8.7% TVL growth", color: "#9945FF", icon: Network },
-            { label: "Institutional", value: "+$842M", sub: "ETF net inflow", color: "#f7931a", icon: Briefcase },
-            { label: "AI Market Score", value: "91 / 100", sub: "BULLISH momentum", color: "#a78bfa", icon: Brain },
+            { label: "Market Cap", value: fmtL(overview?.totalMarketCap ?? 2_780_000_000_000), sub: "+0.3%", pos: true, color: "#2962ff", icon: Globe },
+            { label: "24h Volume", value: fmtL(overview?.totalVolume24h ?? 96_000_000_000), sub: "3.4% of MCap", pos: true, color: "#26a69a", icon: BarChart2 },
+            { label: "BTC Dom", value: `${overview?.btcDominance?.toFixed(1) ?? "58.3"}%`, sub: "↑ rising", pos: true, color: "#f7931a", icon: Activity },
+            { label: "Fear & Greed", value: `${fgVal}`, sub: fgLabel, pos: fgVal >= 50, color: fgColor, icon: Shield },
+            { label: "ETH Gas", value: "18 Gwei", sub: "Normal", pos: true, color: "#627EEA", icon: Zap },
+            { label: "Stable Flow", value: "+$2.8B", sub: "Net inflow", pos: true, color: "#26a69a", icon: ArrowRightLeft },
+            { label: "Open Interest", value: "$28.4B", sub: "Perps", pos: true, color: "#7c3aed", icon: Target },
+            { label: "Top Chain", value: "Solana", sub: "+8.7% TVL", pos: true, color: "#9945FF", icon: Network },
+            { label: "Institution", value: "+$842M", sub: "ETF inflow", pos: true, color: "#f7931a", icon: Briefcase },
+            { label: "AI Score", value: "91", sub: "BULLISH", pos: true, color: "#a78bfa", icon: Brain },
           ].map((s, i) => (
             <motion.div key={s.label}
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-              className="rounded-2xl p-3.5 cursor-pointer transition-all hover:scale-[1.02]"
-              style={{ background: `${s.color}0c`, border: `1px solid ${s.color}22`, boxShadow: `0 4px 20px ${s.color}08` }}
-              whileHover={{ boxShadow: `0 6px 28px ${s.color}18` }}>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-6 h-6 rounded-lg flex items-center justify-center"
+              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
+              className="rounded-xl p-3 cursor-pointer group transition-all"
+              style={{
+                background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.04)",
+                border: `1px solid ${s.color}1a`,
+              }}
+              whileHover={{ scale: 1.04, boxShadow: `0 4px 20px ${s.color}18` }}>
+              {/* Icon + label row */}
+              <div className="flex items-center gap-1.5 mb-2">
+                <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
                   style={{ background: `${s.color}18` }}>
-                  <s.icon size={11} style={{ color: s.color }} />
+                  <s.icon size={10} style={{ color: s.color }} />
                 </div>
-                <span className="text-[9px] uppercase tracking-wider" style={{ color: `${s.color}99` }}>{s.label}</span>
+                <span className="text-[8px] font-bold uppercase tracking-wide truncate" style={{ color: "#3a4058" }}>{s.label}</span>
               </div>
-              <div className="text-[14px] font-black text-white leading-none">{s.value}</div>
-              <div className="text-[9px] mt-1" style={{ color: "#3a4058" }}>{s.sub}</div>
+              {/* Value */}
+              <div className="text-[13px] font-black leading-none" style={{ color: "white" }}>{s.value}</div>
+              {/* Sub */}
+              <div className="text-[8px] mt-1 font-semibold" style={{ color: s.pos ? s.color : "#ef5350", opacity: 0.85 }}>{s.sub}</div>
+              {/* Bottom accent line */}
+              <div className="h-0.5 rounded-full mt-2 transition-all group-hover:opacity-100 opacity-30"
+                style={{ background: `linear-gradient(90deg, ${s.color}, transparent)` }} />
             </motion.div>
           ))}
         </div>
