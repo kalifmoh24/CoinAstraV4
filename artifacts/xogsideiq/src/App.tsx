@@ -13,6 +13,17 @@ import Narratives from "@/pages/Narratives";
 import NarrativeDetail from "@/pages/NarrativeDetail";
 import Signals from "@/pages/Signals";
 import Portfolio from "@/pages/Portfolio";
+import AiInsights from "@/pages/AiInsights";
+import WhaleTracker from "@/pages/WhaleTracker";
+import OnChain from "@/pages/OnChain";
+import Screener from "@/pages/Screener";
+import News from "@/pages/News";
+import Watchlist from "@/pages/Watchlist";
+import Alerts from "@/pages/Alerts";
+import Heatmap from "@/pages/Heatmap";
+import Learn from "@/pages/Learn";
+import Settings from "@/pages/Settings";
+import Profile from "@/pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +41,17 @@ function Router() {
             <Route path="/narratives/:slug" component={NarrativeDetail} />
             <Route path="/signals" component={Signals} />
             <Route path="/portfolio" component={Portfolio} />
+            <Route path="/ai-insights" component={AiInsights} />
+            <Route path="/whale-tracker" component={WhaleTracker} />
+            <Route path="/on-chain" component={OnChain} />
+            <Route path="/screener" component={Screener} />
+            <Route path="/news" component={News} />
+            <Route path="/watchlist" component={Watchlist} />
+            <Route path="/alerts" component={Alerts} />
+            <Route path="/heatmap" component={Heatmap} />
+            <Route path="/learn" component={Learn} />
+            <Route path="/settings" component={Settings} />
+            <Route path="/profile" component={Profile} />
             <Route component={NotFound} />
           </Switch>
         </AppLayout>
