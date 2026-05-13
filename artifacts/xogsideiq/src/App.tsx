@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AppLayout } from "@/components/layout";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
+import Markets from "@/pages/Markets";
 import Research from "@/pages/Research";
 import Narratives from "@/pages/Narratives";
 import NarrativeDetail from "@/pages/NarrativeDetail";
@@ -20,6 +21,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/research/:symbol" component={Home} />
+      <Route path="/markets" component={Markets} />
       <Route>
         <AppLayout>
           <Switch>

@@ -1,9 +1,10 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
-import { Activity, LayoutDashboard, Compass, BookOpen, Briefcase, TrendingUp } from "lucide-react";
+import { Activity, LayoutDashboard, BarChart2, Compass, BookOpen, Briefcase, TrendingUp } from "lucide-react";
 
 const NAV_ITEMS = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/markets", label: "Markets", icon: BarChart2 },
   { path: "/research", label: "Research", icon: Compass },
   { path: "/narratives", label: "Narratives", icon: BookOpen },
   { path: "/signals", label: "Signals", icon: TrendingUp },
