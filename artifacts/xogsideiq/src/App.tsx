@@ -24,19 +24,23 @@ import Heatmap from "@/pages/Heatmap";
 import Learn from "@/pages/Learn";
 import Settings from "@/pages/Settings";
 import Profile from "@/pages/Profile";
+import TokenDetail from "@/pages/TokenDetail";
 
 const queryClient = new QueryClient();
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/research/:symbol" component={Home} />
+      {/* Markets has its own full-page layout (independent nav) */}
       <Route path="/markets" component={Markets} />
+
+      {/* All other routes use AppLayout (sidebar + top nav) */}
       <Route>
         <AppLayout>
           <Switch>
+            <Route path="/" component={Home} />
             <Route path="/research" component={Research} />
+            <Route path="/research/:symbol" component={TokenDetail} />
             <Route path="/narratives" component={Narratives} />
             <Route path="/narratives/:slug" component={NarrativeDetail} />
             <Route path="/signals" component={Signals} />
