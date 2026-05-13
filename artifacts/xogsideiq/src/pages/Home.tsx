@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, Link } from "wouter";
+import { useScreenSize } from "@/hooks/use-screen-size";
+import { MobileDashboard } from "@/components/mobile-dashboard";
 import {
   useGetToken, getGetTokenQueryKey,
   useGetTokenScores, getGetTokenScoresQueryKey,
@@ -210,6 +212,7 @@ function SemiGauge({ value, label, color }: { value: number; label: string; colo
 }
 
 export default function Home() {
+  const { isMobile, isTablet } = useScreenSize();
   const params = useParams();
   const [symbol, setSymbol] = useState(params.symbol?.toUpperCase() || "ETH");
   const [tf, setTf] = useState("D");
@@ -275,6 +278,8 @@ export default function Home() {
 
   const { theme, setTheme } = useTheme();
   const isDark = theme !== "light";
+
+  if (isMobile || isTablet) return <MobileDashboard />;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden text-[#d1d4dc] bg-[#131722]" style={{ fontSize: "11px" }}>
