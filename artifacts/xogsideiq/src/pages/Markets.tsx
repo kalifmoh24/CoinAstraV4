@@ -6,11 +6,14 @@ import {
   ChevronLeft, ChevronRight, Star, Globe, BarChart2,
   Activity, List, LayoutGrid, TrendingUp, Zap, Flame,
   LayoutDashboard, Compass, BookOpen, Briefcase, Bell,
-  X, AlertCircle, Filter, ChevronDown,
+  X, AlertCircle, Filter, ChevronDown, Sun, Moon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useScreenSize } from "@/hooks/use-screen-size";
 import { MobileNav } from "@/components/mobile-nav";
+import { GlobalTicker } from "@/components/global-ticker";
+import { NotificationCenter } from "@/components/notification-center";
+import { useTheme } from "@/components/theme-provider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -444,6 +447,7 @@ function SortTH({ label, sk, sortKey, sortDir, onSort, right }:{
 export default function Markets() {
   const [location] = useLocation();
   const { isMobile, isTablet } = useScreenSize();
+  const { theme, setTheme } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [page, setPage]           = useState(1);
@@ -706,6 +710,9 @@ export default function Markets() {
       <div className="h-screen flex flex-col overflow-hidden"
         style={{ background:"linear-gradient(150deg,#080c16 0%,#0d1117 60%,#080b13 100%)" }}>
 
+        {/* Global Ticker */}
+        <GlobalTicker />
+
         {/* Tablet Header */}
         <header className="flex items-center justify-between px-4 h-12 shrink-0 z-40"
           style={{ background:"rgba(8,12,22,0.95)", backdropFilter:"blur(24px)",
@@ -742,6 +749,13 @@ export default function Markets() {
               className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5">
               <RefreshCw size={14} style={{ color:"#5a6072" }} />
             </button>
+            <button
+              onClick={() => setTheme(theme !== "light" ? "light" : "dark")}
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
+              style={{ color:"#5a6072" }}>
+              {theme !== "light" ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
+            <NotificationCenter />
           </div>
         </header>
 
@@ -957,6 +971,9 @@ export default function Markets() {
     <div className="h-screen flex flex-col overflow-hidden"
       style={{ background:"linear-gradient(150deg,#080c16 0%,#0d1117 60%,#080b13 100%)" }}>
 
+      {/* Global Ticker */}
+      <GlobalTicker />
+
       {/* Desktop Top Nav */}
       <header className="flex items-center justify-between px-4 h-11 shrink-0 z-50"
         style={{ background:"rgba(8,12,22,0.9)", backdropFilter:"blur(24px)",
@@ -985,7 +1002,7 @@ export default function Markets() {
             })}
           </nav>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-bold"
             style={{ background:"rgba(38,166,154,0.1)", color:"#26a69a", border:"1px solid rgba(38,166,154,0.2)" }}>
             <span className="w-1.5 h-1.5 rounded-full bg-[#26a69a] animate-pulse" />
@@ -996,7 +1013,13 @@ export default function Markets() {
             style={{ color:"#5a6072" }}>
             <RefreshCw size={14} />
           </button>
-          <Bell size={14} style={{ color:"#5a6072", cursor:"pointer" }} />
+          <button
+            onClick={() => setTheme(theme !== "light" ? "light" : "dark")}
+            className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:bg-white/5"
+            style={{ color:"#5a6072" }}>
+            {theme !== "light" ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+          <NotificationCenter />
         </div>
       </header>
 

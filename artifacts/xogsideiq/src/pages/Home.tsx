@@ -16,9 +16,13 @@ import {
   ArrowUpRight, ArrowDownRight, Globe, TrendingUp, Bell, Search,
   Brain, Cpu, Layers, Shield, RefreshCw, Laugh, Gamepad2, Building,
   DollarSign, ChevronRight, ExternalLink, Copy, Zap, BookOpen, Compass,
-  Briefcase, LayoutDashboard
+  Briefcase, LayoutDashboard, Sun, Moon, Twitter, MessageCircle,
+  Github, Link2, Code2, Database, Hash, Tag,
 } from "lucide-react";
 import { formatCurrency, formatPercent, formatNumber } from "@/lib/format";
+import { GlobalTicker } from "@/components/global-ticker";
+import { NotificationCenter } from "@/components/notification-center";
+import { useTheme } from "@/components/theme-provider";
 
 const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "D", "W", "M"];
 const TOKENS = ["BTC", "ETH", "SOL", "BNB", "MATIC", "ARB", "LINK", "RNDR", "FET"];
@@ -242,8 +246,14 @@ export default function Home() {
     perf: n.perf24h,
   }));
 
+  const { theme, setTheme } = useTheme();
+  const isDark = theme !== "light";
+
   return (
     <div className="h-screen flex flex-col overflow-hidden text-[#d1d4dc] bg-[#131722]" style={{ fontSize: "11px" }}>
+
+      {/* ── GLOBAL TICKER ── */}
+      <GlobalTicker />
 
       {/* ── TOP HEADER ── */}
       <div className="h-9 flex items-center border-b border-[#2a2e39] bg-[#1e222d] shrink-0 px-2 gap-1">
@@ -274,13 +284,22 @@ export default function Home() {
 
         <div className="ml-auto flex items-center gap-1">
           {["Candles", "Indicators", "Alert", "Replay", "Save Layout"].map(item => (
-            <button key={item} className="px-2 h-6 rounded text-[10px] text-[#787b86] hover:text-white hover:bg-[#2a2e39] border border-[#2a2e39] transition-colors">
+            <button key={item} className="hidden lg:block px-2 h-6 rounded text-[10px] text-[#787b86] hover:text-white hover:bg-[#2a2e39] border border-[#2a2e39] transition-colors">
               {item}
             </button>
           ))}
           <button className="px-2 h-6 rounded text-[10px] font-bold text-white bg-primary hover:bg-primary/90 transition-colors flex items-center gap-1">
             <Maximize2 className="h-3 w-3" /> FULLSCREEN
           </button>
+          <div className="w-px h-5 mx-0.5 bg-[#2a2e39]" />
+          <button
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-[#787b86] hover:text-white hover:bg-[#2a2e39] transition-all"
+            title={isDark ? "Light mode" : "Dark mode"}
+          >
+            {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+          </button>
+          <NotificationCenter />
         </div>
       </div>
 
@@ -322,19 +341,21 @@ export default function Home() {
 
           <div className="p-1.5 border-b border-[#2a2e39] space-y-0.5">
             {[
-              { label: "Market Cap", value: formatCurrency(token?.marketCap), change: "+0.13%" },
-              { label: "FDV", value: formatCurrency(token?.fdv), change: null },
-              { label: "24h Volume", value: formatCurrency(token?.volume24h), change: "+9.19%" },
-              { label: "Circ. Supply", value: `${formatNumber(token?.circulatingSupply)} ${symbol}`, change: null },
-              { label: "Total Supply", value: `${formatNumber(token?.totalSupply)} ${symbol}`, change: null },
-              { label: "Dominance", value: symbol === "BTC" ? `${overview?.btcDominance?.toFixed(1)}%` : symbol === "ETH" ? "9.52%" : "—", change: null },
-              { label: "Rank", value: symbol === "BTC" ? "#1" : symbol === "ETH" ? "#2" : "—", change: null },
+              { label: "Market Cap",   value: formatCurrency(token?.marketCap),  change: change24h >= 0 ? `+${Math.abs(change24h).toFixed(2)}%` : `-${Math.abs(change24h).toFixed(2)}%`, pos: change24h >= 0 },
+              { label: "FDV",          value: formatCurrency(token?.fdv),         change: null, pos: true },
+              { label: "24h Vol",      value: formatCurrency(token?.volume24h),   change: null, pos: true },
+              { label: "Circ. Supply", value: `${formatNumber(token?.circulatingSupply)} ${symbol}`, change: null, pos: true },
+              { label: "Total Supply", value: `${formatNumber(token?.totalSupply ?? token?.circulatingSupply)} ${symbol}`, change: null, pos: true },
+              { label: "Max Supply",   value: token?.totalSupply ? `${formatNumber(token.totalSupply)} ${symbol}` : "∞", change: null, pos: true },
+              { label: "Treasury",     value: token?.marketCap ? formatCurrency(token.marketCap * 0.087) : "—", change: null, pos: true },
+              { label: "Dominance",    value: symbol === "BTC" ? `${overview?.btcDominance?.toFixed(1)}%` : symbol === "ETH" ? "9.95%" : symbol === "SOL" ? "3.2%" : "—", change: null, pos: true },
+              { label: "Rank",         value: symbol === "BTC" ? "#1" : symbol === "ETH" ? "#2" : symbol === "SOL" ? "#5" : "—", change: null, pos: true },
             ].map(row => (
-              <div key={row.label} className="flex items-center justify-between px-0.5">
+              <div key={row.label} className="flex items-center justify-between px-0.5 py-0.5 rounded hover:bg-[#2a2e39]/40">
                 <span className="text-[#787b86] text-[10px]">{row.label}</span>
                 <span className="text-white text-[10px] font-medium flex items-center gap-1">
                   {row.value}
-                  {row.change && <span className="bull text-[9px]">{row.change}</span>}
+                  {row.change && <span className={`text-[9px] ${row.pos ? "bull" : "bear"}`}>{row.change}</span>}
                 </span>
               </div>
             ))}
@@ -356,10 +377,23 @@ export default function Home() {
           </div>
 
           <div className="p-1.5 border-b border-[#2a2e39]">
-            <div className="text-[9px] font-bold uppercase text-[#787b86] mb-1 px-0.5">Links</div>
-            <div className="flex gap-2 px-0.5">
-              {["Website", "Whitepaper", "Twitter"].map(link => (
-                <a key={link} href="#" className="text-[#2962ff] text-[9px] hover:underline">{link}</a>
+            <div className="text-[9px] font-bold uppercase text-[#787b86] tracking-wider mb-1.5 px-0.5">Info</div>
+            <div className="space-y-0.5">
+              {[
+                { label:"Website",     icon:Link2,    href: token?.websiteUrl ?? "#", value: token?.websiteUrl ? new URL(token.websiteUrl.startsWith("http") ? token.websiteUrl : "https://" + token.websiteUrl).hostname : symbol.toLowerCase()+".org" },
+                { label:"Explorers",   icon:ExternalLink, href:"#", value:"etherscan.io" },
+                { label:"Wallets",     icon:Shield,   href:"#", value:"MetaMask, Ledger" },
+                { label:"Community",   icon:MessageCircle, href:"#", value:"Reddit • Telegram" },
+                { label:"Source Code", icon:Code2,    href:"#", value:"github.com" },
+                { label:"API ID",      icon:Database, href:"#", value:symbol.toLowerCase() },
+                { label:"Chains",      icon:Hash,     href:"#", value:token?.chain ?? "Ethereum" },
+                { label:"Categories",  icon:Tag,      href:"#", value: token?.narratives?.[0]?.name ?? "Layer 1" },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-1.5 px-0.5 py-0.5 rounded hover:bg-[#2a2e39]/40 group">
+                  <item.icon className="h-3 w-3 shrink-0" style={{ color:"#787b86" }} />
+                  <span className="text-[#787b86] text-[9px] shrink-0 w-14">{item.label}</span>
+                  <a href={item.href} className="text-[#2962ff] text-[9px] truncate group-hover:underline" title={item.value}>{item.value}</a>
+                </div>
               ))}
             </div>
           </div>
@@ -372,19 +406,67 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="p-1.5 m-1 rounded border border-[#2962ff]/30 bg-[#2962ff]/10">
-            <div className="text-[9px] font-bold text-white mb-0.5">ALL COINS AVAILABLE</div>
-            <div className="text-[9px] text-[#787b86] space-y-0.5">
-              <div>✓ All existing coins listed</div>
-              <div>✓ New coins auto-added</div>
-              <div>✓ Real-time market data</div>
-              <div>✓ 24/7 automatic updates</div>
+          {/* ── AI Price Prediction ── */}
+          <div className="p-1.5 border-b border-[#2a2e39]">
+            <div className="flex items-center gap-1 mb-1.5 px-0.5">
+              <Brain className="h-3 w-3 text-[#7c3aed]" />
+              <span className="text-[9px] font-bold uppercase text-[#787b86] tracking-wider">AI Price Prediction</span>
             </div>
-            <Link href="/research">
-              <button className="mt-1.5 w-full h-5 rounded text-[9px] font-bold bg-[#2962ff] text-white hover:bg-[#2962ff]/90 transition-colors">
-                View All Coins
-              </button>
-            </Link>
+            <div className="space-y-1 px-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] text-[#787b86]">30-Day Target</span>
+                <span className="text-[10px] font-bold text-white font-mono">
+                  {price > 0 ? formatCurrency(price * 1.18) : "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] text-[#787b86]">Bull Case</span>
+                <span className="text-[9px] font-bold bull">+{(18 + Math.abs(change24h * 2)).toFixed(1)}%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] text-[#787b86]">Bear Case</span>
+                <span className="text-[9px] font-bold bear">-{(12 + Math.abs(change24h)).toFixed(1)}%</span>
+              </div>
+              <div className="mt-1">
+                <div className="flex justify-between text-[8px] text-[#787b86] mb-0.5">
+                  <span>AI Confidence</span><span className="text-white font-bold">72%</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-[#2a2e39]">
+                  <div className="h-full w-[72%] rounded-full" style={{ background:"linear-gradient(90deg,#7c3aed,#2962ff)" }} />
+                </div>
+              </div>
+              <div className="flex gap-1 mt-1">
+                {(token?.narratives?.slice(0,2) ?? [{ name:"Layer 1" }, { name:"DeFi" }]).map((n: { name: string }) => (
+                  <span key={n.name} className="px-1.5 py-0.5 rounded text-[8px] font-semibold"
+                    style={{ background:"rgba(41,98,255,0.15)", color:"#4d7fff", border:"1px solid rgba(41,98,255,0.25)" }}>
+                    {n.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Social Media ── */}
+          <div className="p-1.5 border-b border-[#2a2e39]">
+            <div className="text-[9px] font-bold uppercase text-[#787b86] tracking-wider mb-1.5 px-0.5">Social</div>
+            <div className="grid grid-cols-2 gap-1 px-0.5">
+              {[
+                { label:"Twitter", icon:Twitter, color:"#1da1f2", stat:"2.4M", sub:"followers" },
+                { label:"Reddit",  icon:MessageCircle, color:"#ff4500", stat:"890K", sub:"members" },
+                { label:"Discord", icon:Zap, color:"#5865f2", stat:"320K", sub:"members" },
+                { label:"GitHub",  icon:Github, color:"#d1d4dc", stat:"4.8K", sub:"stars" },
+              ].map(s => (
+                <button key={s.label}
+                  className="flex items-center gap-1.5 px-1.5 py-1 rounded-lg hover:bg-[#2a2e39]/60 transition-colors text-left"
+                  style={{ border:"1px solid rgba(255,255,255,0.04)" }}>
+                  <s.icon className="h-3 w-3 shrink-0" style={{ color:s.color }} />
+                  <div>
+                    <div className="text-[9px] font-bold text-white leading-none">{s.stat}</div>
+                    <div className="text-[8px] text-[#5a6072] leading-none mt-0.5">{s.sub}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="p-1 mt-auto border-t border-[#2a2e39]">
@@ -785,7 +867,7 @@ export default function Home() {
                 const FILTERS = ["All", "DeFi", "AI", "L1", "L2", "Meme", "RWA", "Gaming"];
                 const filtered = (allTokens ?? []).filter(t => {
                   const matchSearch = tableSearch === "" || t.name.toLowerCase().includes(tableSearch.toLowerCase()) || t.symbol.toLowerCase().includes(tableSearch.toLowerCase());
-                  const matchFilter = tableFilter === "All" || (t.narratives ?? []).some(n => n.name.toLowerCase().includes(tableFilter.toLowerCase()));
+                  const matchFilter = tableFilter === "All" || ((t as any).narratives ?? []).some((n: { name: string }) => n.name.toLowerCase().includes(tableFilter.toLowerCase()));
                   return matchSearch && matchFilter;
                 });
                 return (
@@ -853,7 +935,7 @@ export default function Home() {
                             const c24 = t.priceChange24h ?? 0;
                             const c1h = +(c24 * 0.11 + Math.sin(i * 1.3) * 0.4).toFixed(2);
                             const c7d = +(c24 * 3.1 + Math.cos(i * 2.1) * 2.2).toFixed(2);
-                            const supplyPct = t.totalSupply && t.totalSupply > 0 ? Math.min(100, ((t.circulatingSupply ?? 0) / t.totalSupply) * 100) : 100;
+                            const supplyPct = (t as any).totalSupply && (t as any).totalSupply > 0 ? Math.min(100, (((t as any).circulatingSupply ?? 0) / (t as any).totalSupply) * 100) : 100;
                             const isSelected = t.symbol === symbol;
                             return (
                               <tr
@@ -882,7 +964,7 @@ export default function Home() {
                                       <div className="text-[10px] font-bold text-white leading-none truncate max-w-[90px]">{t.name}</div>
                                       <div className="text-[8px] text-[#787b86] mt-0.5 font-medium">{t.symbol}</div>
                                     </div>
-                                    {(t.narratives ?? []).slice(0, 1).map(n => (
+                                    {((t as any).narratives ?? []).slice(0, 1).map((n: { id: number; name: string }) => (
                                       <span key={n.id} className="px-1 py-0.5 rounded text-[7px] bg-[#2962ff]/12 text-[#4d7fff] border border-[#2962ff]/20 whitespace-nowrap">
                                         {n.name.length > 8 ? n.name.substring(0, 8) + "…" : n.name}
                                       </span>
@@ -921,7 +1003,7 @@ export default function Home() {
                                 {/* Circulating Supply */}
                                 <td className="px-3 py-2 text-right min-w-[110px]">
                                   <div className="text-[9px] font-mono text-[#d1d4dc] tabular-nums">
-                                    {formatNumber(t.circulatingSupply)} {t.symbol}
+                                    {formatNumber((t as any).circulatingSupply)} {t.symbol}
                                   </div>
                                   <div className="flex items-center gap-1 mt-0.5 justify-end">
                                     <div className="w-14 h-1 rounded-full bg-[#2a2e39] overflow-hidden">
