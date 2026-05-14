@@ -308,4 +308,69 @@ router.get("/tokens/:symbol/news", async (req, res): Promise<void> => {
   );
 });
 
+/** POST /api/tokens/import — add a CoinGecko coin to the platform tokens table */
+router.post("/tokens/import", async (req, res, next): Promise<void> => {
+  try {
+    const {
+      id: cgId,
+      symbol,
+      name,
+      image,
+      current_price,
+      price_change_percentage_24h,
+      price_change_percentage_7d_in_currency,
+      market_cap,
+      total_volume,
+      fully_diluted_valuation,
+      circulating_supply,
+      total_supply,
+    } = req.body as Record<string, unknown>;
+
+    if (!cgId || !symbol || !name) {
+      res.status(400).json({ error: "id, symbol, and name are required" });
+      return;
+    }
+
+    const upperSymbol = (symbol as string).toUpperCase();
+
+    const existing = await db
+      .select({ id: tokensTable.id, symbol: tokensTable.symbol })
+      .from(tokensTable)
+      .where(eq(tokensTable.symbol, upperSymbol))
+      .limit(1);
+
+    if (existing.length > 0) {
+      res.status(200).json({ imported: false, message: "Already on platform" });
+      return;
+    }
+
+    await db.insert(tokensTable).values({
+      symbol: upperSymbol,
+      name: name as string,
+      logoUrl: (image as string) ?? null,
+      chain: "Multi-Chain",
+      coingeckoId: cgId as string,
+      price: (current_price as number) ?? null,
+      priceChange24h: (price_change_percentage_24h as number) ?? null,
+      priceChange7d: (price_change_percentage_7d_in_currency as number) ?? null,
+      marketCap: (market_cap as number) ?? null,
+      volume24h: (total_volume as number) ?? null,
+      fdv: (fully_diluted_valuation as number) ?? null,
+      circulatingSupply: (circulating_supply as number) ?? null,
+      totalSupply: (total_supply as number) ?? null,
+      overallScore: 50,
+      fundamentalScore: 50,
+      technicalScore: 50,
+      sentimentScore: 50,
+      riskScore: 50,
+      narrativeMomentumScore: 50,
+      finalGrade: "B",
+    });
+
+    res.status(201).json({ imported: true, message: "Coin added to CoinAstra" });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

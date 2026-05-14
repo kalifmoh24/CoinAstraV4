@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 // ── Coin search ────────────────────────────────────────────────────────────────
 
@@ -149,6 +149,116 @@ export function useCoinOHLC(coinId: string | undefined, days: number) {
     enabled: !!coinId,
     staleTime: 300_000,
     retry: 2,
+  });
+}
+
+// ── Coin categories (CoinGecko universe) ──────────────────────────────────────
+
+export interface CoinCategory {
+  id: string;
+  name: string;
+  market_cap: number;
+  market_cap_change_24h: number;
+  content: string;
+  top_3_coins: string[];
+  volume_24h: number;
+  updated_at: string;
+}
+
+export interface CoinMarketItem {
+  id: string;
+  symbol: string;
+  name: string;
+  image: string;
+  current_price: number;
+  market_cap: number;
+  market_cap_rank: number;
+  fully_diluted_valuation: number | null;
+  total_volume: number;
+  high_24h: number;
+  low_24h: number;
+  price_change_24h: number;
+  price_change_percentage_24h: number;
+  price_change_percentage_7d_in_currency?: number;
+  circulating_supply: number;
+  total_supply: number | null;
+  ath: number;
+  ath_change_percentage: number;
+}
+
+/** All CoinGecko categories sorted by market cap */
+export function useCoinCategories() {
+  return useQuery<CoinCategory[]>({
+    queryKey: ["ca-coin-categories"],
+    queryFn: async () => {
+      const r = await fetch("/api/coins/categories");
+      if (!r.ok) throw new Error(`categories ${r.status}`);
+      return r.json();
+    },
+    staleTime: 600_000,
+    retry: 2,
+  });
+}
+
+/** Coins in a specific CoinGecko category */
+export function useCategoryCoins(categoryId: string | null, page: number) {
+  return useQuery<CoinMarketItem[]>({
+    queryKey: ["ca-category-coins", categoryId, page],
+    queryFn: async () => {
+      const r = await fetch(`/api/coins/categories/${categoryId}/coins?page=${page}&per_page=100`);
+      if (!r.ok) throw new Error(`category-coins ${r.status}`);
+      return r.json();
+    },
+    enabled: !!categoryId,
+    staleTime: 60_000,
+    retry: 2,
+  });
+}
+
+/** All coins sorted by mcap (for "All Coins" view) */
+export function useAllCoins(page: number) {
+  return useQuery<CoinMarketItem[]>({
+    queryKey: ["ca-all-coins", page],
+    queryFn: async () => {
+      const r = await fetch(`/api/coins/markets?page=${page}&per_page=100`);
+      if (!r.ok) throw new Error(`all-coins ${r.status}`);
+      return r.json();
+    },
+    staleTime: 60_000,
+    retry: 2,
+  });
+}
+
+/** Platform tokens (for checking which coins are already added) */
+export function usePlatformTokenSymbols() {
+  return useQuery<string[]>({
+    queryKey: ["ca-platform-token-symbols"],
+    queryFn: async () => {
+      const r = await fetch("/api/tokens?limit=500");
+      if (!r.ok) throw new Error(`tokens ${r.status}`);
+      const data = await r.json() as Array<{ symbol: string }>;
+      return data.map(t => t.symbol.toUpperCase());
+    },
+    staleTime: 30_000,
+  });
+}
+
+/** Import a coin from CoinGecko into the platform */
+export function useImportCoin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (coin: CoinMarketItem) => {
+      const r = await fetch("/api/tokens/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(coin),
+      });
+      if (!r.ok) throw new Error(`import ${r.status}`);
+      return r.json() as Promise<{ imported: boolean; message: string }>;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ca-platform-token-symbols"] });
+    },
   });
 }
 

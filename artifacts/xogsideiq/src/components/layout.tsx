@@ -52,6 +52,7 @@ const NAV_SECTIONS = [
   {
     label: "MORE",
     items: [
+      { path: "/discover",  label: "Discover",    icon: Globe,         color: "#2962ff" },
       { path: "/research",  label: "Research",    icon: Compass,       color: "#7c3aed" },
       { path: "/learn",     label: "Academy",     icon: GraduationCap, color: "#0ea5e9" },
       { path: "/settings",  label: "Settings",    icon: Settings2,     color: "#5a6072" },

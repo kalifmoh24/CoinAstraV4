@@ -80,6 +80,8 @@ const TTL = {
   OHLC: 300_000,         // 5min
   FEAR_GREED: 600_000,   // 10min
   GLOBAL: 60_000,        // 60s
+  CATEGORIES: 600_000,   // 10min — categories rarely change
+  CAT_COINS: 60_000,     // 60s — coin prices update
 };
 
 export interface CoinMarket {
@@ -231,6 +233,38 @@ export async function getCoinOHLC(id: string, days: number): Promise<number[][]>
   return cgFetch<number[][]>(`/coins/${encodeURIComponent(id)}/ohlc`, TTL.OHLC, {
     vs_currency: "usd",
     days: String(validDays),
+  });
+}
+
+export interface CoinCategory {
+  id: string;
+  name: string;
+  market_cap: number;
+  market_cap_change_24h: number;
+  content: string;
+  top_3_coins: string[];
+  top_3_coins_id?: string[];
+  volume_24h: number;
+  updated_at: string;
+}
+
+/** All CoinGecko categories with market data, sorted by market cap */
+export async function getCoinCategories(): Promise<CoinCategory[]> {
+  return cgFetch<CoinCategory[]>("/coins/categories", TTL.CATEGORIES, {
+    order: "market_cap_desc",
+  });
+}
+
+/** Coins in a specific CoinGecko category, paginated */
+export async function getCoinsByCategory(categoryId: string, page = 1, perPage = 100): Promise<CoinMarket[]> {
+  return cgFetch<CoinMarket[]>("/coins/markets", TTL.CAT_COINS, {
+    vs_currency: "usd",
+    category: categoryId,
+    order: "market_cap_desc",
+    per_page: String(Math.min(perPage, 250)),
+    page: String(page),
+    sparkline: "false",
+    price_change_percentage: "7d",
   });
 }
 

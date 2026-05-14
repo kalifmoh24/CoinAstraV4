@@ -25,6 +25,7 @@ import Learn from "@/pages/Learn";
 import Settings from "@/pages/Settings";
 import Profile from "@/pages/Profile";
 import TokenDetail from "@/pages/TokenDetail";
+import Discover from "@/pages/Discover";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ function Router() {
         <AppLayout>
           <Switch>
             <Route path="/" component={Home} />
+            <Route path="/discover" component={Discover} />
             <Route path="/research" component={Research} />
             <Route path="/research/:symbol" component={TokenDetail} />
             <Route path="/narratives" component={Narratives} />

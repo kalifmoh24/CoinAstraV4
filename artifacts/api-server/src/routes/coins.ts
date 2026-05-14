@@ -8,6 +8,8 @@ import {
   getTrending,
   getFearGreed,
   getGlobal,
+  getCoinCategories,
+  getCoinsByCategory,
 } from "../lib/coingecko.js";
 
 const router: IRouter = Router();
@@ -63,6 +65,29 @@ router.get("/coins/fear-greed", async (_req, res, next): Promise<void> => {
 router.get("/coins/global", async (_req, res, next): Promise<void> => {
   try {
     const data = await getGlobal();
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/coins/categories — all CoinGecko categories with market data */
+router.get("/coins/categories", async (_req, res, next): Promise<void> => {
+  try {
+    const data = await getCoinCategories();
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/coins/categories/:id/coins?page=1&per_page=100 */
+router.get("/coins/categories/:id/coins", async (req, res, next): Promise<void> => {
+  try {
+    const id = String(req.params["id"]);
+    const page = Math.max(1, Number(req.query["page"]) || 1);
+    const perPage = Math.min(250, Math.max(10, Number(req.query["per_page"]) || 100));
+    const data = await getCoinsByCategory(id, page, perPage);
     res.json(data);
   } catch (err) {
     next(err);
