@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   Activity, LayoutDashboard, BarChart2, Compass, BookOpen, Briefcase,
   TrendingUp, Sun, Moon, ChevronLeft, ChevronRight, Globe,
   Brain, Waves, Network, ScanLine, Newspaper, Star, Bell, LayoutGrid,
   GraduationCap, Settings2, User, Sparkles, Zap, Search, X,
-  Layers, Coins, Calendar, Building2, Gamepad2, Shield, BarChart,
+  Layers, Coins, Calendar, Building2, Gamepad2, Shield, BarChart, TrendingDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MobileNav } from "@/components/mobile-nav";
@@ -14,6 +15,12 @@ import { GlobalTicker } from "@/components/global-ticker";
 import { useTheme } from "@/components/theme-provider";
 import { useFearGreedLive, useLiveCoins } from "@/hooks/use-market-data";
 import { useGetMarketOverview, getGetMarketOverviewQueryKey } from "@workspace/api-client-react";
+
+async function fetchCoinSearch(q: string) {
+  const res = await fetch(`/api/coins/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) return { coins: [] };
+  return res.json() as Promise<{ coins: Array<{ id: string; name: string; symbol: string; market_cap_rank: number | null; thumb: string }> }>;
+}
 
 const NAV_SECTIONS = [
   {
@@ -63,15 +70,17 @@ const NAV_SECTIONS = [
 
 const ALL_NAV = NAV_SECTIONS.flatMap(s => s.items);
 
-const SEARCH_SUGGESTIONS = [
-  { label: "Bitcoin", sub: "BTC · #1", path: "/" },
-  { label: "Ethereum", sub: "ETH · #2", path: "/" },
-  { label: "Solana", sub: "SOL · #4", path: "/" },
+const PAGE_SUGGESTIONS = [
+  { label: "Dashboard", sub: "Home overview", path: "/" },
+  { label: "Markets", sub: "Live coin table", path: "/markets" },
   { label: "AI Insights", sub: "Intelligence page", path: "/ai-insights" },
   { label: "Whale Tracker", sub: "Live whale feed", path: "/whale-tracker" },
   { label: "Heatmap", sub: "Visual market map", path: "/heatmap" },
   { label: "Portfolio", sub: "Your holdings", path: "/portfolio" },
   { label: "Narratives", sub: "Sector analysis", path: "/narratives" },
+  { label: "Signals", sub: "AI trading signals", path: "/signals" },
+  { label: "Screener", sub: "AI screener", path: "/screener" },
+  { label: "Discover", sub: "Browse all coins", path: "/discover" },
 ];
 
 function fmtL(n: number) {
@@ -82,13 +91,28 @@ function fmtL(n: number) {
 }
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { theme, setTheme } = useTheme();
   const isDark = theme !== "light";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [now, setNow] = useState(new Date());
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 280);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchQuery]);
+
+  const { data: searchData, isFetching: searchFetching } = useQuery({
+    queryKey: ["coin-search-layout", debouncedQuery],
+    queryFn: () => fetchCoinSearch(debouncedQuery),
+    enabled: debouncedQuery.length >= 2,
+    staleTime: 30_000,
+  });
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -111,9 +135,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     location === path || (path !== "/" && location.startsWith(path));
   const currentPage = ALL_NAV.find(n => isActive(n.path));
 
-  const suggestions = SEARCH_SUGGESTIONS.filter(s =>
+  const coinResults = searchData?.coins ?? [];
+  const hasQuery = searchQuery.trim().length >= 2;
+  const pageSuggestions = PAGE_SUGGESTIONS.filter(s =>
     !searchQuery || s.label.toLowerCase().includes(searchQuery.toLowerCase()) || s.sub.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ).slice(0, hasQuery ? 3 : 6);
 
   // Close search on Escape
   useEffect(() => {
@@ -192,21 +218,66 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
                     backdropFilter: "blur(24px)",
                   }}>
-                  <div className="px-3 py-1.5 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-                    <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: "#3a4058" }}>Quick Search</span>
+                  <div className="px-3 py-1.5 border-b flex items-center justify-between" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                    <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: "#3a4058" }}>
+                      {hasQuery ? "Live Search" : "Quick Navigation"}
+                    </span>
+                    {searchFetching && <span className="text-[8px]" style={{ color: "#5a6072" }}>Searching…</span>}
                   </div>
-                  {suggestions.map((s, i) => (
-                    <Link key={i} href={s.path} onClick={() => { setSearchOpen(false); setSearchQuery(""); }}>
-                      <div className="flex items-center gap-3 px-3 py-2 transition-all cursor-pointer hover:bg-white/[0.04]">
-                        <Search className="h-3 w-3 shrink-0" style={{ color: "#3a4058" }} />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[11px] font-semibold text-foreground">{s.label}</div>
-                          <div className="text-[9px]" style={{ color: "#4a5268" }}>{s.sub}</div>
-                        </div>
-                        <ChevronRight className="h-3 w-3" style={{ color: "#3a4058" }} />
+
+                  {/* Coin results from CoinGecko */}
+                  {hasQuery && coinResults.length > 0 && (
+                    <>
+                      <div className="px-3 pt-2 pb-0.5">
+                        <span className="text-[8px] font-black uppercase tracking-wider" style={{ color: "#3a4058" }}>Coins</span>
                       </div>
-                    </Link>
-                  ))}
+                      {coinResults.slice(0, 8).map((coin, i) => (
+                        <div key={coin.id}
+                          className="flex items-center gap-3 px-3 py-2 transition-all cursor-pointer hover:bg-white/[0.04]"
+                          onClick={() => { setLocation(`/research/${coin.symbol.toUpperCase()}`); setSearchOpen(false); setSearchQuery(""); }}>
+                          <img src={coin.thumb} alt={coin.name} className="w-6 h-6 rounded-full shrink-0"
+                            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[11px] font-semibold text-foreground truncate">{coin.name}</div>
+                            <div className="text-[9px] flex items-center gap-1" style={{ color: "#4a5268" }}>
+                              <span className="uppercase font-mono">{coin.symbol}</span>
+                              {coin.market_cap_rank && <span>· #{coin.market_cap_rank}</span>}
+                            </div>
+                          </div>
+                          <ChevronRight className="h-3 w-3 shrink-0" style={{ color: "#3a4058" }} />
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Page suggestions */}
+                  {pageSuggestions.length > 0 && (
+                    <>
+                      {hasQuery && coinResults.length > 0 && (
+                        <div className="px-3 pt-2 pb-0.5 border-t mt-1" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                          <span className="text-[8px] font-black uppercase tracking-wider" style={{ color: "#3a4058" }}>Pages</span>
+                        </div>
+                      )}
+                      {pageSuggestions.map((s, i) => (
+                        <Link key={i} href={s.path} onClick={() => { setSearchOpen(false); setSearchQuery(""); }}>
+                          <div className="flex items-center gap-3 px-3 py-2 transition-all cursor-pointer hover:bg-white/[0.04]">
+                            <Search className="h-3 w-3 shrink-0" style={{ color: "#3a4058" }} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[11px] font-semibold text-foreground">{s.label}</div>
+                              <div className="text-[9px]" style={{ color: "#4a5268" }}>{s.sub}</div>
+                            </div>
+                            <ChevronRight className="h-3 w-3" style={{ color: "#3a4058" }} />
+                          </div>
+                        </Link>
+                      ))}
+                    </>
+                  )}
+
+                  {hasQuery && !searchFetching && coinResults.length === 0 && pageSuggestions.length === 0 && (
+                    <div className="px-3 py-6 text-center">
+                      <span className="text-[11px]" style={{ color: "#5a6072" }}>No results for "{searchQuery}"</span>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

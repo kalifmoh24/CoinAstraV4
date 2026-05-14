@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Brain, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Zap, Waves,
@@ -216,6 +216,9 @@ export function DesktopDashboard() {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  const [, setLocation] = useLocation();
+  const nav = (sym: string) => setLocation(`/research/${sym.toUpperCase()}`);
 
   const { data: cgCoins, isLoading: coinsLoading, dataUpdatedAt } = useLiveCoins();
   const { gainers, losers } = useGainersLosers(6);
@@ -492,6 +495,7 @@ export function DesktopDashboard() {
             return (
               <motion.div key={r.coin}
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.04 }}
+                onClick={() => nav(r.coin)}
                 className="grid gap-2 px-4 py-2.5 border-b transition-all hover:bg-white/[0.02] cursor-pointer"
                 style={{ gridTemplateColumns: "32px 160px 100px 60px 70px 70px 90px 100px 80px 70px 60px 70px", borderColor: c.border }}>
                 <span className="text-[10px] text-[#3a4058] font-mono self-center">{r.rank}</span>
@@ -552,6 +556,7 @@ export function DesktopDashboard() {
             {AI_OPPS.map((opp, i) => (
               <motion.div key={opp.coin}
                 initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }}
+                onClick={() => nav(opp.coin)}
                 className="rounded-2xl p-4 cursor-pointer relative overflow-hidden transition-all hover:scale-[1.02]"
                 style={{ background: c.card, border: `1px solid ${opp.color}22`, boxShadow: `0 4px 20px ${opp.color}08` }}
                 whileHover={{ boxShadow: `0 6px 32px ${opp.color}18` }}>
@@ -651,7 +656,8 @@ export function DesktopDashboard() {
                   </div>
                   <div className="flex gap-1.5">
                     {n.coins.map(c => (
-                      <span key={c} className="text-[8px] px-1.5 py-0.5 rounded-md font-mono"
+                      <span key={c} onClick={e => { e.stopPropagation(); nav(c); }}
+                        className="text-[8px] px-1.5 py-0.5 rounded-md font-mono cursor-pointer hover:brightness-125 transition-all"
                         style={{ background: `${n.color}15`, color: n.color }}>{c}</span>
                     ))}
                   </div>
@@ -675,7 +681,8 @@ export function DesktopDashboard() {
                 return (
                   <motion.div key={coin.coin}
                     initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.025 }}
-                    className={`${sz} rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all hover:brightness-110`}
+                    onClick={() => nav(coin.coin)}
+                    className={`${sz} rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all hover:brightness-125 hover:scale-105`}
                     style={{ background: heatColor(coin.ch) }}>
                     <div className="text-[9px] font-black text-white">{coin.coin}</div>
                     <div className="text-[8px] font-bold mt-0.5" style={{ color: "rgba(255,255,255,0.8)" }}>

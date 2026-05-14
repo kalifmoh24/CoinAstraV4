@@ -443,14 +443,21 @@ function SortTH({ label, sk, sortKey, sortDir, onSort, right }:{
 
 // ─── Main Markets Component ───────────────────────────────────────────────────
 
+async function fetchCoinSearchMarkets(q: string) {
+  const res = await fetch(`/api/coins/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) return { coins: [] };
+  return res.json() as Promise<{ coins: Array<{ id: string; name: string; symbol: string; market_cap_rank: number | null; thumb: string }> }>;
+}
+
 export default function Markets() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { isMobile, isTablet } = useScreenSize();
   const { theme, setTheme } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [page, setPage]           = useState(1);
   const [search, setSearch]       = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [category, setCategory]   = useState("All");
   const [sortKey, setSortKey]     = useState<SortKey>("rank");
   const [sortDir, setSortDir]     = useState<SortDir>("asc");
@@ -458,6 +465,12 @@ export default function Markets() {
   const [watchlist, setWatchlist] = useState<Set<string>>(new Set());
   const [countdown, setCountdown] = useState(30);
   const [showSearch, setShowSearch] = useState(false);
+
+  // Debounce search for live CoinGecko search
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // ── Data ─────────────────────────────────────────────────────────────────────
   const { data:coins, isLoading, isError, error, dataUpdatedAt, refetch } = useQuery({
@@ -474,6 +487,15 @@ export default function Markets() {
     staleTime: 55_000,
   });
   const g = globalRaw?.data;
+
+  // Live CoinGecko search — fires when local search yields no results
+  const { data: liveSearchData, isFetching: searchFetching } = useQuery({
+    queryKey: ["cg-search-markets", debouncedSearch],
+    queryFn: () => fetchCoinSearchMarkets(debouncedSearch),
+    enabled: debouncedSearch.length >= 2,
+    staleTime: 30_000,
+  });
+  const liveSearchCoins = liveSearchData?.coins ?? [];
 
   // ── Countdown ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -872,9 +894,10 @@ export default function Markets() {
                                 transition={{ duration:0.1, delay:Math.min(idx*0.008,0.3) }}
                                 className="group"
                                 style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
+                                onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
                                 onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background="rgba(41,98,255,0.04)"; }}
                                 onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background="transparent"; }}>
-                                <td className="pl-4 pr-2 py-3">
+                                <td className="pl-4 pr-2 py-3" onClick={e => e.stopPropagation()}>
                                   <Star size={13} style={{ color:isWatched?"#f7931a":"#2a2e3a", fill:isWatched?"#f7931a":"none", cursor:"pointer" }}
                                     onClick={() => toggleWatch(coin.id)} />
                                 </td>
@@ -1184,9 +1207,10 @@ export default function Markets() {
                               initial={{ opacity:0 }} animate={{ opacity:1 }}
                               transition={{ duration:0.1, delay:Math.min(idx*0.007,0.3) }}
                               style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
+                              onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
                               onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background="rgba(41,98,255,0.04)"; }}
                               onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background="transparent"; }}>
-                              <td className="pl-4 pr-2 py-3.5">
+                              <td className="pl-4 pr-2 py-3.5" onClick={e => e.stopPropagation()}>
                                 <Star size={14} style={{ color:isWatched?"#f7931a":"#2a2e3a", fill:isWatched?"#f7931a":"none", cursor:"pointer" }}
                                   onClick={() => toggleWatch(coin.id)} />
                               </td>
@@ -1234,14 +1258,52 @@ export default function Markets() {
                   </tbody>
                 </table>
                 {!isLoading && filtered.length===0 && (
-                  <div className="flex flex-col items-center justify-center py-16">
-                    <Search size={28} className="text-white mb-3 opacity-20" />
-                    <p className="text-[13px] font-semibold text-white mb-1">No coins found</p>
-                    <button onClick={() => { setSearch(""); setCategory("All"); }}
-                      className="mt-2 px-4 py-1.5 rounded-xl text-[11px] font-medium"
-                      style={{ background:"rgba(41,98,255,0.15)", color:"#4d7fff", border:"1px solid rgba(41,98,255,0.3)" }}>
-                      Clear filters
-                    </button>
+                  <div className="py-6 px-4">
+                    {searchFetching && (
+                      <div className="flex items-center justify-center gap-2 py-6">
+                        <Search size={14} style={{ color:"#4d7fff" }} className="animate-pulse" />
+                        <span className="text-[12px]" style={{ color:"#5a6072" }}>Searching CoinGecko…</span>
+                      </div>
+                    )}
+                    {!searchFetching && liveSearchCoins.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider mb-3 px-1" style={{ color:"#4a5068" }}>
+                          Live Search Results
+                        </div>
+                        <div className="space-y-1">
+                          {liveSearchCoins.map(coin => (
+                            <div key={coin.id}
+                              onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
+                              className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all"
+                              style={{ background:"rgba(41,98,255,0.04)", border:"1px solid rgba(255,255,255,0.04)" }}
+                              onMouseEnter={e => (e.currentTarget.style.background="rgba(41,98,255,0.1)")}
+                              onMouseLeave={e => (e.currentTarget.style.background="rgba(41,98,255,0.04)")}>
+                              <img src={coin.thumb} alt={coin.name} className="w-7 h-7 rounded-full shrink-0"
+                                onError={e => { (e.currentTarget as HTMLImageElement).style.display="none"; }} />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[12px] font-bold text-white">{coin.name}</div>
+                                <div className="text-[9px] uppercase font-mono" style={{ color:"#5a6072" }}>{coin.symbol}</div>
+                              </div>
+                              {coin.market_cap_rank && (
+                                <span className="text-[9px] font-mono" style={{ color:"#5a6072" }}>#{coin.market_cap_rank}</span>
+                              )}
+                              <ChevronRight size={12} style={{ color:"#3a4058" }} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!searchFetching && liveSearchCoins.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-10">
+                        <Search size={28} className="text-white mb-3 opacity-20" />
+                        <p className="text-[13px] font-semibold text-white mb-1">No coins found</p>
+                        <button onClick={() => { setSearch(""); setCategory("All"); }}
+                          className="mt-2 px-4 py-1.5 rounded-xl text-[11px] font-medium"
+                          style={{ background:"rgba(41,98,255,0.15)", color:"#4d7fff", border:"1px solid rgba(41,98,255,0.3)" }}>
+                          Clear filters
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1263,6 +1325,7 @@ export default function Markets() {
                       <motion.div key={coin.id}
                         initial={{ opacity:0, scale:0.96 }} animate={{ opacity:1, scale:1 }}
                         transition={{ duration:0.18, delay:Math.min(idx*0.01,0.4) }}
+                        onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
                         className="rounded-2xl p-4 relative overflow-hidden group"
                         style={{ background:"rgba(13,17,26,0.8)", backdropFilter:"blur(20px)",
                           border:"1px solid rgba(255,255,255,0.05)", cursor:"pointer", transition:"all 0.2s" }}
