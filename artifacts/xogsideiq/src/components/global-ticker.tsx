@@ -22,7 +22,7 @@ export function GlobalTicker() {
   const { data } = useQuery({
     queryKey: ["cg-global-ticker"],
     queryFn: async () => {
-      const res = await fetch("https://api.coingecko.com/api/v3/global");
+      const res = await fetch("/api/coins/global");
       if (!res.ok) throw new Error("rate-limited");
       return res.json() as Promise<{ data: GlobalData }>;
     },

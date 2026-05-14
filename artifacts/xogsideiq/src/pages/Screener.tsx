@@ -1,15 +1,18 @@
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "wouter";
 import {
   ScanLine, Filter, Zap, TrendingUp, TrendingDown, ArrowUp, ArrowDown,
   RefreshCw, Star, BarChart2, Activity, ChevronDown, ChevronUp,
-  Flame, Target, Shield, Eye,
+  Flame, Target, Shield, Eye, Loader2,
 } from "lucide-react";
+import { useLiveCoins250 } from "@/hooks/use-market-data";
+import { analyzeToken } from "@/lib/ai-engine";
 
 function fmtPrice(n: number) {
   if (n >= 1) return `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
   if (n >= 0.01) return `$${n.toFixed(4)}`;
-  return `$${n.toFixed(7)}`;
+  return `$${n.toFixed(8)}`;
 }
 function fmtLarge(n: number) {
   if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
@@ -17,84 +20,105 @@ function fmtLarge(n: number) {
   return `$${(n / 1e3).toFixed(0)}K`;
 }
 
-const ALL_COINS = [
-  { coin: "SOL", name: "Solana", price: 178.32, ch24: 5.2, ch7d: 18.4, mcap: 82_000_000_000, vol: 4_200_000_000, aiScore: 94, signal: "STRONG BUY", volumeSpike: 4.8, momentum: 85, chain: "Solana", risk: "LOW", smartMoney: "ACC", conf: 91 },
-  { coin: "LINK", name: "Chainlink", price: 15.60, ch24: 4.3, ch7d: 12.1, mcap: 9_100_000_000, vol: 920_000_000, aiScore: 88, signal: "BUY", volumeSpike: 3.2, momentum: 68, chain: "Ethereum", risk: "LOW", smartMoney: "ACC", conf: 84 },
-  { coin: "RNDR", name: "Render", price: 8.45, ch24: 3.1, ch7d: 9.8, mcap: 3_400_000_000, vol: 380_000_000, aiScore: 85, signal: "BUY", volumeSpike: 2.9, momentum: 64, chain: "Solana", risk: "MEDIUM", smartMoney: "ACC", conf: 82 },
-  { coin: "SUI", name: "SUI", price: 1.84, ch24: 12.4, ch7d: 28.7, mcap: 2_100_000_000, vol: 620_000_000, aiScore: 91, signal: "STRONG BUY", volumeSpike: 6.1, momentum: 92, chain: "SUI", risk: "MEDIUM", smartMoney: "ACC", conf: 88 },
-  { coin: "JTO", name: "Jito", price: 3.12, ch24: 8.9, ch7d: 21.3, mcap: 420_000_000, vol: 142_000_000, aiScore: 82, signal: "BUY", volumeSpike: 5.4, momentum: 76, chain: "Solana", risk: "MEDIUM", smartMoney: "ACC", conf: 79 },
-  { coin: "STRK", name: "Starknet", price: 0.84, ch24: 6.7, ch7d: 14.2, mcap: 680_000_000, vol: 198_000_000, aiScore: 78, signal: "BUY", volumeSpike: 2.7, momentum: 58, chain: "Ethereum", risk: "HIGH", smartMoney: "NEU", conf: 72 },
-  { coin: "PENDLE", name: "Pendle", price: 5.12, ch24: 4.8, ch7d: 16.9, mcap: 520_000_000, vol: 88_000_000, aiScore: 80, signal: "BUY", volumeSpike: 2.2, momentum: 61, chain: "Ethereum", risk: "MEDIUM", smartMoney: "ACC", conf: 77 },
-  { coin: "W", name: "Wormhole", price: 0.48, ch24: 9.2, ch7d: 24.1, mcap: 480_000_000, vol: 168_000_000, aiScore: 76, signal: "BUY", volumeSpike: 3.8, momentum: 71, chain: "Solana", risk: "HIGH", smartMoney: "NEU", conf: 70 },
-  { coin: "DOGE", name: "Dogecoin", price: 0.148, ch24: -2.1, ch7d: -4.8, mcap: 21_000_000_000, vol: 1_800_000_000, aiScore: 42, signal: "SELL", volumeSpike: 0.8, momentum: -18, chain: "Other", risk: "HIGH", smartMoney: "DIS", conf: 58 },
-  { coin: "INJ", name: "Injective", price: 24.80, ch24: 2.9, ch7d: 7.4, mcap: 2_300_000_000, vol: 280_000_000, aiScore: 76, signal: "BUY", volumeSpike: 2.1, momentum: 55, chain: "Ethereum", risk: "MEDIUM", smartMoney: "ACC", conf: 76 },
-  { coin: "BONK", name: "Bonk", price: 0.0000288, ch24: 14.8, ch7d: 42.1, mcap: 1_900_000_000, vol: 840_000_000, aiScore: 68, signal: "WATCH", volumeSpike: 8.2, momentum: 88, chain: "Solana", risk: "HIGH", smartMoney: "NEU", conf: 62 },
-  { coin: "WIF", name: "dogwifhat", price: 2.84, ch24: 7.6, ch7d: 19.8, mcap: 2_840_000_000, vol: 620_000_000, aiScore: 70, signal: "WATCH", volumeSpike: 4.4, momentum: 72, chain: "Solana", risk: "HIGH", smartMoney: "NEU", conf: 65 },
-];
-
 const SIGNAL_COLORS: Record<string, string> = {
-  "STRONG BUY": "#26a69a", BUY: "#26a69a", WATCH: "#f7931a", SELL: "#ef5350", "STRONG SELL": "#ef5350",
+  "STRONG BUY": "#26a69a", BUY: "#26a69a", HOLD: "#f7931a", WATCH: "#f7931a",
+  SELL: "#ef5350", "STRONG SELL": "#ef5350",
 };
-const RISK_COLORS: Record<string, string> = { LOW: "#26a69a", MEDIUM: "#f7931a", HIGH: "#ef5350" };
+
+const MEME_IDS = new Set(["dogecoin","shiba-inu","pepe","bonk","floki","dogwifhat","brett","mog-coin","book-of-meme","popcat"]);
 
 type SortKey = "aiScore" | "ch24" | "ch7d" | "volumeSpike" | "momentum" | "conf" | "mcap";
 
 const PRESETS = [
-  { id: "vol", label: "Volume Spikes", icon: Activity, color: "#f7931a", desc: "Coins with 2×+ volume surge" },
+  { id: "vol", label: "Volume Spikes", icon: Activity, color: "#f7931a", desc: "Coins with 3×+ volume surge" },
   { id: "momentum", label: "Momentum", icon: TrendingUp, color: "#26a69a", desc: "High momentum score >60" },
   { id: "meme", label: "Meme Pumps", icon: Flame, color: "#ef5350", desc: "Meme coins with price spike" },
   { id: "smart", label: "Smart Money", icon: Star, color: "#7c3aed", desc: "Smart money accumulating" },
-  { id: "gem", label: "AI Gems", icon: Zap, color: "#2962ff", desc: "AI score >80, low cap" },
+  { id: "gem", label: "AI Gems", icon: Zap, color: "#2962ff", desc: "AI score >80, mid/small cap" },
 ];
 
 export default function Screener() {
   const [sortKey, setSortKey] = useState<SortKey>("aiScore");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [minMcap, setMinMcap] = useState(0);
-  const [maxRisk, setMaxRisk] = useState<"ALL" | "LOW" | "MEDIUM" | "HIGH">("ALL");
-  const [chain, setChain] = useState("ALL");
   const [preset, setPreset] = useState<string | null>(null);
   const [minVolSpike, setMinVolSpike] = useState(0);
-  const [scanning, setScanning] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const { data: rawCoins, isLoading, isError } = useLiveCoins250();
 
   const handleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(k); setSortDir("desc"); }
   };
 
+  const coins = useMemo(() => {
+    if (!rawCoins?.length) return [];
+    return rawCoins.map(c => {
+      const ai = analyzeToken({
+        priceChange24h: c.price_change_percentage_24h ?? 0,
+        priceChange7d: c.price_change_percentage_7d_in_currency ?? 0,
+        volume24h: c.total_volume,
+        marketCap: c.market_cap,
+        price: c.current_price,
+        symbol: c.symbol.toUpperCase(),
+      });
+      const volSpike = c.market_cap > 0 ? (c.total_volume / c.market_cap) * 10 : 1;
+      const signalLabel = ai.signal === "STRONG_BUY" ? "STRONG BUY"
+        : ai.signal === "BUY" ? "BUY"
+        : ai.signal === "HOLD" ? "HOLD"
+        : ai.signal === "SELL" ? "SELL"
+        : "STRONG SELL";
+      const smartLabel = ai.smartMoney === "ACCUMULATING" ? "ACC"
+        : ai.smartMoney === "DISTRIBUTING" ? "DIS" : "NEU";
+      const riskScore = ai.bearishProbability;
+      const risk = riskScore > 55 ? "HIGH" : riskScore > 38 ? "MEDIUM" : "LOW";
+      return {
+        id: c.id,
+        coin: c.symbol.toUpperCase(),
+        name: c.name,
+        image: c.image,
+        price: c.current_price,
+        ch24: c.price_change_percentage_24h ?? 0,
+        ch7d: c.price_change_percentage_7d_in_currency ?? 0,
+        mcap: c.market_cap,
+        vol: c.total_volume,
+        aiScore: ai.confidence,
+        signal: signalLabel,
+        volumeSpike: Math.round(volSpike * 10) / 10,
+        momentum: ai.momentumScore,
+        risk,
+        smartMoney: smartLabel,
+        conf: ai.confidence,
+        isMeme: MEME_IDS.has(c.id),
+      };
+    });
+  }, [rawCoins]);
+
   const filtered = useMemo(() => {
-    let list = [...ALL_COINS];
-    if (maxRisk !== "ALL") {
-      const levels = { LOW: ["LOW"], MEDIUM: ["LOW","MEDIUM"], HIGH: ["LOW","MEDIUM","HIGH"] };
-      list = list.filter(c => levels[maxRisk].includes(c.risk));
-    }
-    if (chain !== "ALL") list = list.filter(c => c.chain === chain);
+    let list = [...coins];
+    if (minMcap > 0) list = list.filter(c => c.mcap >= minMcap);
     if (minVolSpike > 0) list = list.filter(c => c.volumeSpike >= minVolSpike);
     if (preset === "vol") list = list.filter(c => c.volumeSpike >= 3);
-    if (preset === "momentum") list = list.filter(c => c.momentum >= 60);
-    if (preset === "meme") list = list.filter(c => ["DOGE","SHIB","PEPE","BONK","WIF"].includes(c.coin));
+    if (preset === "momentum") list = list.filter(c => c.momentum >= 50);
+    if (preset === "meme") list = list.filter(c => c.isMeme);
     if (preset === "smart") list = list.filter(c => c.smartMoney === "ACC");
-    if (preset === "gem") list = list.filter(c => c.aiScore >= 80 && c.mcap < 5_000_000_000);
+    if (preset === "gem") list = list.filter(c => c.aiScore >= 75 && c.mcap < 10_000_000_000);
     list.sort((a, b) => {
       const diff = (a[sortKey] as number) - (b[sortKey] as number);
       return sortDir === "desc" ? -diff : diff;
     });
     return list;
-  }, [sortKey, sortDir, maxRisk, chain, minVolSpike, preset]);
+  }, [coins, minMcap, minVolSpike, preset, sortKey, sortDir]);
 
-  function SortTH({ label, sk, right }: { label: string; sk: SortKey; right?: boolean }) {
-    const active = sortKey === sk;
-    return (
-      <th className={`px-3 py-2 text-[9px] font-semibold uppercase tracking-wider cursor-pointer select-none ${right ? "text-right" : "text-left"}`}
-        style={{ color: active ? "#4d7fff" : "#3a4058" }}
-        onClick={() => handleSort(sk)}>
-        <div className={`flex items-center gap-0.5 ${right ? "justify-end" : ""}`}>
-          {label}
-          {active ? (sortDir === "desc" ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronUp className="h-2.5 w-2.5" />) : null}
-        </div>
-      </th>
-    );
-  }
+  const SortBtn = ({ k, label }: { k: SortKey; label: string }) => (
+    <button onClick={() => handleSort(k)}
+      className="flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wider transition-colors"
+      style={{ color: sortKey === k ? "#f7931a" : "#3a4058" }}>
+      {label}
+      {sortKey === k ? (sortDir === "desc" ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronUp className="h-2.5 w-2.5" />) : <ArrowDown className="h-2.5 w-2.5 opacity-30" />}
+    </button>
+  );
 
   return (
     <div className="space-y-4">
@@ -103,234 +127,198 @@ export default function Screener() {
         <div>
           <div className="flex items-center gap-2.5 mb-1">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#f7931a,#ef5350)", boxShadow: "0 0 16px rgba(247,147,26,0.4)" }}>
+              style={{ background: "linear-gradient(135deg,#2962ff,#4d7fff)", boxShadow: "0 0 16px rgba(41,98,255,0.4)" }}>
               <ScanLine className="h-4 w-4 text-white" />
             </div>
             <h1 className="text-[22px] font-black tracking-tight"
-              style={{ background: "linear-gradient(130deg,#fff 0%,#fed7aa 50%,#f7931a 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              style={{ background: "linear-gradient(130deg,#fff 0%,#93c5fd 50%,#2962ff 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
               AI Screener
             </h1>
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin" style={{ color: "#2962ff" }} />}
           </div>
           <p className="text-[12px]" style={{ color: "#5a6072" }}>
-            Find opportunities automatically · {filtered.length} results
+            {filtered.length} coins · AI-scored from {coins.length} live markets · updates every 30s
           </p>
         </div>
-        <button
+        <button onClick={() => setShowFilters(f => !f)}
           className="flex items-center gap-1.5 px-3 h-8 rounded-xl text-[11px] font-semibold transition-all"
-          style={{ background: "rgba(247,147,26,0.15)", color: "#f7931a", border: "1px solid rgba(247,147,26,0.3)" }}
-          onClick={() => { setScanning(true); setTimeout(() => setScanning(false), 1500); }}>
-          <ScanLine className={`h-3 w-3 ${scanning ? "animate-spin" : ""}`} />
-          {scanning ? "Scanning..." : "Run Scan"}
+          style={{ background: "rgba(41,98,255,0.15)", color: "#4d7fff", border: "1px solid rgba(41,98,255,0.3)" }}>
+          <Filter className="h-3.5 w-3.5" /> Filters
         </button>
       </div>
 
-      {/* Preset Strategies */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] font-semibold" style={{ color: "#4a5068" }}>Presets:</span>
+      {/* Presets */}
+      <div className="flex gap-2 flex-wrap">
         {PRESETS.map(p => (
           <button key={p.id} onClick={() => setPreset(preset === p.id ? null : p.id)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-semibold transition-all"
+            className="flex items-center gap-1.5 px-3 h-7 rounded-xl text-[10px] font-semibold transition-all"
             style={{
-              background: preset === p.id ? `${p.color}20` : "rgba(255,255,255,0.04)",
+              background: preset === p.id ? `${p.color}25` : "rgba(255,255,255,0.03)",
               color: preset === p.id ? p.color : "#5a6072",
-              border: preset === p.id ? `1px solid ${p.color}40` : "1px solid rgba(255,255,255,0.06)",
+              border: `1px solid ${preset === p.id ? p.color + "50" : "rgba(255,255,255,0.06)"}`,
             }}>
-            <p.icon className="h-3 w-3" />
-            {p.label}
+            <p.icon className="h-3 w-3" /> {p.label}
           </button>
         ))}
-        {preset && (
-          <button onClick={() => setPreset(null)} className="text-[10px] px-2 py-1 rounded-lg transition-all hover:bg-white/5"
-            style={{ color: "#5a6072" }}>✕ Clear</button>
-        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Filter Panel */}
-        <div className="space-y-3">
-          <div className="rounded-2xl p-4 space-y-4"
+      {/* Filters panel */}
+      <AnimatePresence>
+        {showFilters && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            className="rounded-2xl overflow-hidden" style={{ background: "rgba(13,17,26,0.9)", border: "1px solid rgba(41,98,255,0.2)" }}>
+            <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <label className="text-[9px] font-semibold uppercase tracking-wider mb-2 block" style={{ color: "#4a5068" }}>Min Market Cap</label>
+                <select value={minMcap} onChange={e => setMinMcap(Number(e.target.value))}
+                  className="w-full rounded-lg px-3 py-1.5 text-[11px] font-semibold"
+                  style={{ background: "rgba(255,255,255,0.05)", color: "#fff", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <option value={0}>All</option>
+                  <option value={100_000_000}>$100M+</option>
+                  <option value={500_000_000}>$500M+</option>
+                  <option value={1_000_000_000}>$1B+</option>
+                  <option value={10_000_000_000}>$10B+</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] font-semibold uppercase tracking-wider mb-2 block" style={{ color: "#4a5068" }}>Min Vol/MCap</label>
+                <select value={minVolSpike} onChange={e => setMinVolSpike(Number(e.target.value))}
+                  className="w-full rounded-lg px-3 py-1.5 text-[11px] font-semibold"
+                  style={{ background: "rgba(255,255,255,0.05)", color: "#fff", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <option value={0}>Any</option>
+                  <option value={1}>1×+</option>
+                  <option value={2}>2×+</option>
+                  <option value={3}>3×+</option>
+                  <option value={5}>5×+</option>
+                </select>
+              </div>
+              <div className="col-span-2 flex items-end">
+                <button onClick={() => { setMinMcap(0); setMinVolSpike(0); setPreset(null); }}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all hover:bg-white/5"
+                  style={{ color: "#5a6072", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  Reset Filters
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Stats bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Screened", value: filtered.length.toString(), color: "#2962ff" },
+          { label: "BUY Signals", value: filtered.filter(c => c.signal.includes("BUY")).length.toString(), color: "#26a69a" },
+          { label: "Avg AI Score", value: filtered.length ? Math.round(filtered.reduce((a,c) => a+c.aiScore, 0)/filtered.length).toString() : "—", color: "#7c3aed" },
+          { label: "Volume Spikes", value: filtered.filter(c => c.volumeSpike >= 3).length.toString(), color: "#f7931a" },
+        ].map(s => (
+          <div key={s.label} className="rounded-2xl p-3"
             style={{ background: "rgba(13,17,26,0.85)", border: "1px solid rgba(255,255,255,0.06)" }}>
-            <div className="flex items-center gap-2">
-              <Filter className="h-3.5 w-3.5" style={{ color: "#f7931a" }} />
-              <span className="text-[12px] font-bold text-white">Filters</span>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wider block mb-2" style={{ color: "#4a5068" }}>Chain</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {["ALL","Ethereum","Solana","SUI","Other"].map(c => (
-                  <button key={c} onClick={() => setChain(c)}
-                    className="px-2 py-1 rounded-lg text-[10px] font-semibold transition-all"
-                    style={{
-                      background: chain === c ? "rgba(247,147,26,0.18)" : "rgba(255,255,255,0.04)",
-                      color: chain === c ? "#f7931a" : "#5a6072",
-                      border: chain === c ? "1px solid rgba(247,147,26,0.35)" : "1px solid rgba(255,255,255,0.06)",
-                    }}>{c}</button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wider block mb-2" style={{ color: "#4a5068" }}>Max Risk</label>
-              <div className="flex flex-col gap-1.5">
-                {(["ALL","LOW","MEDIUM","HIGH"] as const).map(r => (
-                  <button key={r} onClick={() => setMaxRisk(r)}
-                    className="px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-all text-left"
-                    style={{
-                      background: maxRisk === r ? `${RISK_COLORS[r] ?? "#5a6072"}15` : "rgba(255,255,255,0.04)",
-                      color: maxRisk === r ? (RISK_COLORS[r] ?? "#d1d4dc") : "#5a6072",
-                      border: maxRisk === r ? `1px solid ${RISK_COLORS[r] ?? "#5a6072"}30` : "1px solid rgba(255,255,255,0.06)",
-                    }}>
-                    {r === "ALL" ? "All Risks" : r}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wider block mb-2" style={{ color: "#4a5068" }}>
-                Min Volume Spike: {minVolSpike}×
-              </label>
-              <input type="range" min={0} max={5} step={0.5} value={minVolSpike}
-                onChange={e => setMinVolSpike(parseFloat(e.target.value))}
-                className="w-full accent-[#f7931a]" />
-              <div className="flex justify-between text-[8px]" style={{ color: "#3a4058" }}>
-                <span>0×</span><span>5×</span>
-              </div>
-            </div>
-
-            <button onClick={() => { setChain("ALL"); setMaxRisk("ALL"); setMinVolSpike(0); setPreset(null); }}
-              className="w-full py-2 rounded-xl text-[10px] font-semibold transition-all hover:bg-white/5"
-              style={{ color: "#5a6072", border: "1px solid rgba(255,255,255,0.07)" }}>
-              Reset All Filters
-            </button>
+            <div className="text-[9px] uppercase tracking-wider font-semibold mb-1" style={{ color: "#4a5068" }}>{s.label}</div>
+            <div className="text-[18px] font-black" style={{ color: s.color }}>{s.value}</div>
           </div>
+        ))}
+      </div>
 
-          {/* Quick Stats */}
-          <div className="rounded-2xl p-4"
-            style={{ background: "rgba(13,17,26,0.85)", border: "1px solid rgba(255,255,255,0.06)" }}>
-            <span className="text-[11px] font-bold text-white block mb-3">Scan Results</span>
-            <div className="space-y-2">
-              {[
-                { label: "BUY signals", value: filtered.filter(c => c.signal.includes("BUY")).length, color: "#26a69a" },
-                { label: "WATCH signals", value: filtered.filter(c => c.signal === "WATCH").length, color: "#f7931a" },
-                { label: "SELL signals", value: filtered.filter(c => c.signal === "SELL").length, color: "#ef5350" },
-                { label: "Volume spikes", value: filtered.filter(c => c.volumeSpike >= 2).length, color: "#f7931a" },
-                { label: "Smart money", value: filtered.filter(c => c.smartMoney === "ACC").length, color: "#7c3aed" },
-              ].map(s => (
-                <div key={s.label} className="flex items-center justify-between">
-                  <span className="text-[10px]" style={{ color: "#787b86" }}>{s.label}</span>
-                  <span className="text-[11px] font-black" style={{ color: s.color }}>{s.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Results Table */}
-        <div className="lg:col-span-3">
-          <div className="rounded-2xl overflow-hidden"
-            style={{ background: "rgba(10,14,22,0.85)", border: "1px solid rgba(255,255,255,0.06)" }}>
-            <div className="overflow-x-auto">
-              <table className="w-full" style={{ minWidth: 720 }}>
-                <thead>
-                  <tr style={{ background: "rgba(8,12,22,0.95)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                    <th className="px-3 py-2.5 text-left text-[9px] font-semibold uppercase tracking-wider" style={{ color: "#3a4058" }}>Coin</th>
-                    <th className="px-3 py-2.5 text-left text-[9px] font-semibold uppercase tracking-wider" style={{ color: "#3a4058" }}>Signal</th>
-                    <SortTH label="AI Score" sk="aiScore" right />
-                    <SortTH label="24h %" sk="ch24" right />
-                    <SortTH label="7d %" sk="ch7d" right />
-                    <SortTH label="Vol Spike" sk="volumeSpike" right />
-                    <SortTH label="Momentum" sk="momentum" right />
-                    <SortTH label="Conf." sk="conf" right />
-                    <th className="px-3 py-2.5 text-right text-[9px] font-semibold uppercase tracking-wider" style={{ color: "#3a4058" }}>Smart $</th>
-                    <th className="px-3 py-2.5 text-right text-[9px] font-semibold uppercase tracking-wider" style={{ color: "#3a4058" }}>Risk</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <AnimatePresence mode="popLayout">
-                    {filtered.map((coin, idx) => (
-                      <motion.tr key={coin.coin}
-                        layout
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        transition={{ duration: 0.12, delay: Math.min(idx * 0.02, 0.3) }}
-                        className="transition-colors cursor-pointer"
-                        style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}
-                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = "rgba(247,147,26,0.04)"}
-                        onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = "transparent"}>
-                        <td className="px-3 py-3">
-                          <div className="font-black text-[12px] text-white">{coin.coin}</div>
-                          <div className="text-[9px]" style={{ color: "#4a5068" }}>{coin.name}</div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <span className="px-2 py-0.5 rounded-lg text-[9px] font-bold"
-                            style={{ background: `${SIGNAL_COLORS[coin.signal]}18`, color: SIGNAL_COLORS[coin.signal], border: `1px solid ${SIGNAL_COLORS[coin.signal]}30` }}>
-                            {coin.signal}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <div className="w-12 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
-                              <div className="h-full rounded-full" style={{ width: `${coin.aiScore}%`, background: "linear-gradient(90deg,#7c3aed,#a78bfa)" }} />
-                            </div>
-                            <span className="text-[10px] font-black" style={{ color: "#a78bfa" }}>{coin.aiScore}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <span className="text-[11px] font-bold tabular-nums font-mono"
-                            style={{ color: coin.ch24 >= 0 ? "#26a69a" : "#ef5350" }}>
-                            {coin.ch24 >= 0 ? "+" : ""}{coin.ch24.toFixed(1)}%
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <span className="text-[11px] font-bold tabular-nums font-mono"
-                            style={{ color: coin.ch7d >= 0 ? "#26a69a" : "#ef5350" }}>
-                            {coin.ch7d >= 0 ? "+" : ""}{coin.ch7d.toFixed(1)}%
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <span className="text-[11px] font-bold font-mono tabular-nums"
-                            style={{ color: coin.volumeSpike >= 3 ? "#f7931a" : coin.volumeSpike >= 2 ? "#d1d4dc" : "#5a6072" }}>
-                            {coin.volumeSpike.toFixed(1)}×
-                          </span>
-                          {coin.volumeSpike >= 3 && <Flame className="inline h-3 w-3 ml-0.5" style={{ color: "#f7931a" }} />}
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <span className="text-[10px] font-mono" style={{ color: coin.momentum > 60 ? "#26a69a" : coin.momentum < 0 ? "#ef5350" : "#d1d4dc" }}>
-                            {coin.momentum}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <span className="text-[10px] font-mono" style={{ color: "#a78bfa" }}>{coin.conf}%</span>
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <span className="text-[10px] font-semibold"
-                            style={{ color: coin.smartMoney === "ACC" ? "#26a69a" : coin.smartMoney === "DIS" ? "#ef5350" : "#5a6072" }}>
-                            {coin.smartMoney === "ACC" ? "Accum." : coin.smartMoney === "DIS" ? "Dist." : "Neutral"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
-                            style={{ background: `${RISK_COLORS[coin.risk]}15`, color: RISK_COLORS[coin.risk] }}>
-                            {coin.risk}
-                          </span>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
-                </tbody>
-              </table>
-              {filtered.length === 0 && (
-                <div className="flex flex-col items-center py-16">
-                  <ScanLine className="h-8 w-8 mb-3 opacity-20" style={{ color: "#5a6072" }} />
-                  <p className="text-[13px] font-bold text-white mb-1">No coins match filters</p>
-                  <button onClick={() => { setChain("ALL"); setMaxRisk("ALL"); setMinVolSpike(0); setPreset(null); }}
-                    className="mt-2 px-4 py-1.5 rounded-xl text-[11px]"
-                    style={{ background: "rgba(247,147,26,0.15)", color: "#f7931a" }}>Reset Filters</button>
-                </div>
+      {/* Coin table */}
+      <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(10,14,22,0.85)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="overflow-x-auto">
+          <table className="w-full" style={{ minWidth: 700 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <th className="px-3 py-2.5 text-left text-[9px] font-semibold uppercase tracking-wider" style={{ color: "#3a4058" }}>#</th>
+                <th className="px-3 py-2.5 text-left text-[9px] font-semibold uppercase tracking-wider" style={{ color: "#3a4058" }}>Coin</th>
+                <th className="px-3 py-2.5 text-left"><SortBtn k="ch24" label="24h" /></th>
+                <th className="px-3 py-2.5 text-left"><SortBtn k="ch7d" label="7d" /></th>
+                <th className="px-3 py-2.5 text-left"><SortBtn k="mcap" label="Mcap" /></th>
+                <th className="px-3 py-2.5 text-left"><SortBtn k="volumeSpike" label="Vol/Mcap" /></th>
+                <th className="px-3 py-2.5 text-left"><SortBtn k="momentum" label="Momentum" /></th>
+                <th className="px-3 py-2.5 text-left"><SortBtn k="aiScore" label="AI Score" /></th>
+                <th className="px-3 py-2.5 text-left text-[9px] font-semibold uppercase tracking-wider" style={{ color: "#3a4058" }}>Signal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isError && (
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-[12px]" style={{ color: "#5a6072" }}>Failed to load market data. Retrying...</td></tr>
               )}
-            </div>
-          </div>
+              {isLoading && Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                  {Array.from({ length: 9 }).map((_, j) => (
+                    <td key={j} className="px-3 py-3">
+                      <div className="h-3 rounded-md animate-pulse" style={{ background: "rgba(255,255,255,0.05)", width: j === 1 ? 80 : 40 }} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {!isLoading && filtered.slice(0, 100).map((coin, i) => (
+                <motion.tr key={coin.id} layout
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i * 0.02, 0.4) }}
+                  className="transition-colors cursor-pointer"
+                  style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = "rgba(41,98,255,0.04)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = "transparent"}>
+                  <td className="px-3 py-2.5">
+                    <span className="text-[10px]" style={{ color: "#3a4058" }}>{i + 1}</span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Link href={`/research/${coin.coin}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                      {coin.image && <img src={coin.image} alt={coin.name} className="w-6 h-6 rounded-full" />}
+                      <div>
+                        <div className="text-[12px] font-black text-white">{coin.coin}</div>
+                        <div className="text-[9px] truncate max-w-[80px]" style={{ color: "#4a5068" }}>{coin.name}</div>
+                      </div>
+                    </Link>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-0.5" style={{ color: coin.ch24 >= 0 ? "#26a69a" : "#ef5350" }}>
+                      {coin.ch24 >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                      <span className="text-[11px] font-bold tabular-nums">{Math.abs(coin.ch24).toFixed(1)}%</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className="text-[11px] font-bold tabular-nums" style={{ color: coin.ch7d >= 0 ? "#26a69a" : "#ef5350" }}>
+                      {coin.ch7d >= 0 ? "+" : ""}{coin.ch7d.toFixed(1)}%
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className="text-[11px] tabular-nums text-white">{fmtLarge(coin.mcap)}</span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className="text-[11px] font-bold tabular-nums" style={{ color: coin.volumeSpike >= 3 ? "#f7931a" : "#a0a8bc" }}>
+                      {coin.volumeSpike.toFixed(1)}×
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+                        <div className="h-full rounded-full" style={{
+                          width: `${Math.min(100, Math.max(0, (coin.momentum + 100) / 2))}%`,
+                          background: coin.momentum > 30 ? "linear-gradient(90deg,#26a69a,#4dd0c5)" : coin.momentum < -30 ? "linear-gradient(90deg,#ef5350,#ff8a80)" : "rgba(255,255,255,0.2)",
+                        }} />
+                      </div>
+                      <span className="text-[9px] font-bold" style={{ color: coin.momentum > 0 ? "#26a69a" : "#ef5350" }}>
+                        {coin.momentum > 0 ? "+" : ""}{coin.momentum}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-1">
+                      <div className="w-10 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+                        <div className="h-full rounded-full" style={{ width: `${coin.aiScore}%`, background: "linear-gradient(90deg,#7c3aed,#a78bfa)" }} />
+                      </div>
+                      <span className="text-[10px] font-black" style={{ color: "#a78bfa" }}>{coin.aiScore}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className="px-2 py-0.5 rounded-lg text-[9px] font-bold"
+                      style={{ background: `${SIGNAL_COLORS[coin.signal] ?? "#5a6072"}18`, color: SIGNAL_COLORS[coin.signal] ?? "#5a6072", border: `1px solid ${SIGNAL_COLORS[coin.signal] ?? "#5a6072"}30` }}>
+                      {coin.signal}
+                    </span>
+                  </td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

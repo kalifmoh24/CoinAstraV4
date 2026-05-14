@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, tokensTable, narrativesTable, newsTable } from "@workspace/db";
-import { eq, or, like, ilike, sql } from "drizzle-orm";
+import { eq, or, ilike } from "drizzle-orm";
+import { getCoinChart, getCoinDetails, getCoinIdBySymbol } from "../lib/coingecko.js";
 import {
   ListTokensQueryParams,
   GetTokenParams,
@@ -195,6 +196,88 @@ router.get("/tokens/:symbol/ai-research", async (req, res): Promise<void> => {
     opportunityLevel: opportunityMap[grade] ?? "moderate",
     generatedAt: new Date().toISOString(),
   });
+});
+
+router.get("/tokens/:symbol/chart", async (req, res, next): Promise<void> => {
+  try {
+    const raw = Array.isArray(req.params.symbol) ? req.params.symbol[0] : req.params.symbol;
+    const symbol = raw.toUpperCase();
+    const days = Math.min(365, Math.max(1, Number(req.query["days"]) || 7));
+
+    const [token] = await db.select().from(tokensTable).where(eq(tokensTable.symbol, symbol));
+
+    let cgId = token?.coingeckoId ?? null;
+    if (!cgId) {
+      cgId = await getCoinIdBySymbol(symbol);
+    }
+
+    if (!cgId) {
+      res.status(404).json({ error: "CoinGecko ID not found for this token" });
+      return;
+    }
+
+    const chart = await getCoinChart(cgId, days);
+    res.json(chart);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/tokens/:symbol/live", async (req, res, next): Promise<void> => {
+  try {
+    const raw = Array.isArray(req.params.symbol) ? req.params.symbol[0] : req.params.symbol;
+    const symbol = raw.toUpperCase();
+
+    const [token] = await db.select().from(tokensTable).where(eq(tokensTable.symbol, symbol));
+
+    let cgId = token?.coingeckoId ?? null;
+    if (!cgId) {
+      cgId = await getCoinIdBySymbol(symbol);
+    }
+
+    if (!cgId) {
+      res.status(404).json({ error: "CoinGecko ID not found for this token" });
+      return;
+    }
+
+    const details = await getCoinDetails(cgId);
+    const md = details.market_data;
+    res.json({
+      id: cgId,
+      symbol: details.symbol.toUpperCase(),
+      name: details.name,
+      image: details.image?.large,
+      price: md.current_price?.usd,
+      priceChange24h: md.price_change_percentage_24h,
+      priceChange7d: md.price_change_percentage_7d,
+      priceChange30d: md.price_change_percentage_30d,
+      priceChange1y: md.price_change_percentage_1y,
+      marketCap: md.market_cap?.usd,
+      volume24h: md.total_volume?.usd,
+      fdv: md.fully_diluted_valuation?.usd,
+      high24h: md.high_24h?.usd,
+      low24h: md.low_24h?.usd,
+      ath: md.ath?.usd,
+      athChange: md.ath_change_percentage?.usd,
+      athDate: md.ath_date?.usd,
+      circulatingSupply: md.circulating_supply,
+      totalSupply: md.total_supply,
+      maxSupply: md.max_supply,
+      contractAddress: details.contract_address,
+      platforms: details.platforms,
+      categories: details.categories,
+      links: {
+        homepage: details.links?.homepage?.[0],
+        whitepaper: details.links?.whitepaper,
+        twitter: details.links?.twitter_screen_name,
+        reddit: details.links?.subreddit_url,
+        explorers: details.links?.blockchain_site?.filter(Boolean).slice(0, 3),
+      },
+      description: details.description?.en,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get("/tokens/:symbol/news", async (req, res): Promise<void> => {

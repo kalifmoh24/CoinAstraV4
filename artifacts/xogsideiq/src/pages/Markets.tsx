@@ -107,14 +107,13 @@ function fmtSupply(n: number, sym: string): string {
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 async function fetchMarkets(page: number): Promise<CoinMarket[]> {
-  const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=${page}&sparkline=true&price_change_percentage=1h,7d`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
+  const res = await fetch(`/api/coins/markets?per_page=100&page=${page}&sparkline=true&price_change_percentage=1h,7d`);
+  if (!res.ok) throw new Error(`markets ${res.status}`);
   return res.json();
 }
 async function fetchGlobal(): Promise<{ data: GlobalData }> {
-  const res = await fetch("https://api.coingecko.com/api/v3/global");
-  if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
+  const res = await fetch("/api/coins/global");
+  if (!res.ok) throw new Error(`global ${res.status}`);
   return res.json();
 }
 

@@ -27,7 +27,9 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
-  const statusCode = err.statusCode ?? 500;
+  // Treat CoinGecko rate-limit as 429, not 500
+  const isCgRateLimit = err.message?.includes("CoinGecko 429") || err.message?.includes("429:");
+  const statusCode = isCgRateLimit ? 429 : (err.statusCode ?? 500);
   const isDev = process.env["NODE_ENV"] !== "production";
 
   if (statusCode >= 500) {
@@ -35,9 +37,13 @@ export function errorHandler(
   }
 
   res.status(statusCode).json({
-    error: err.code ?? (statusCode >= 500 ? "Internal Server Error" : "Request Error"),
-    message: err.message ?? "An unexpected error occurred",
-    ...(isDev && statusCode >= 500 ? { stack: err.stack } : {}),
+    error: isCgRateLimit
+      ? "Rate Limited"
+      : (err.code ?? (statusCode >= 500 ? "Internal Server Error" : "Request Error")),
+    message: isCgRateLimit
+      ? "CoinGecko API rate limit reached. Data will retry automatically — live on coinastra.io."
+      : (err.message ?? "An unexpected error occurred"),
+    ...(isDev && statusCode >= 500 && !isCgRateLimit ? { stack: err.stack } : {}),
     ...(err.details ? { details: err.details } : {}),
   });
 }
