@@ -4,6 +4,7 @@ import {
   searchCoins,
   getCoinDetails,
   getCoinChart,
+  getCoinOHLC,
   getTrending,
   getFearGreed,
   getGlobal,
@@ -85,6 +86,18 @@ router.get("/coins/:id/chart", async (req, res, next): Promise<void> => {
     const id = String(req.params["id"]).toLowerCase();
     const days = Math.min(365, Math.max(1, Number(req.query["days"]) || 7));
     const data = await getCoinChart(id, days);
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/coins/:id/ohlc?days=7 — candlestick OHLC data */
+router.get("/coins/:id/ohlc", async (req, res, next): Promise<void> => {
+  try {
+    const id = String(req.params["id"]).toLowerCase();
+    const days = Math.min(365, Math.max(1, Number(req.query["days"]) || 7));
+    const data = await getCoinOHLC(id, days);
     res.json(data);
   } catch (err) {
     next(err);

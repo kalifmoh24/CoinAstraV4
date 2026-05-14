@@ -77,6 +77,7 @@ const TTL = {
   SEARCH: 300_000,       // 5min
   COIN: 60_000,          // 60s
   CHART: 300_000,        // 5min
+  OHLC: 300_000,         // 5min
   FEAR_GREED: 600_000,   // 10min
   GLOBAL: 60_000,        // 60s
 };
@@ -222,6 +223,15 @@ export async function getGlobal(): Promise<GlobalData> {
 /** Fear & Greed index */
 export async function getFearGreed(): Promise<{ data: { value: string; value_classification: string; timestamp: string }[] }> {
   return altFetch("/fng/?limit=7&format=json", TTL.FEAR_GREED);
+}
+
+/** OHLC candlestick data — [[timestamp_ms, open, high, low, close], ...] */
+export async function getCoinOHLC(id: string, days: number): Promise<number[][]> {
+  const validDays = [1, 7, 14, 30, 90, 180, 365].includes(days) ? days : 7;
+  return cgFetch<number[][]>(`/coins/${encodeURIComponent(id)}/ohlc`, TTL.OHLC, {
+    vs_currency: "usd",
+    days: String(validDays),
+  });
 }
 
 /** Find a coin ID by symbol (searches and picks best match) */

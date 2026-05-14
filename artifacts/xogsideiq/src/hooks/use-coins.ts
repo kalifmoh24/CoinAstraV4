@@ -45,17 +45,22 @@ export interface CoinLiveData {
   ath: number;
   athChange: number;
   athDate: string;
+  atl: number;
+  atlChange?: number;
+  atlDate?: string;
   circulatingSupply: number;
   totalSupply: number | null;
   maxSupply: number | null;
   contractAddress?: string;
   platforms?: Record<string, string>;
   categories?: string[];
+  rank?: number;
   links?: {
     homepage?: string;
     whitepaper?: string;
     twitter?: string;
     reddit?: string;
+    github?: string[];
     explorers?: string[];
   };
   description?: string;
@@ -122,6 +127,23 @@ export function useCoinChart(coinId: string | undefined, days: number) {
     queryFn: async () => {
       const r = await fetch(`/api/coins/${coinId}/chart?days=${days}`);
       if (!r.ok) throw new Error(`chart ${r.status}`);
+      return r.json();
+    },
+    enabled: !!coinId,
+    staleTime: 300_000,
+    retry: 2,
+  });
+}
+
+// ── OHLC candlestick data ──────────────────────────────────────────────────────
+
+/** [timestamp_ms, open, high, low, close][] — for candlestick charts */
+export function useCoinOHLC(coinId: string | undefined, days: number) {
+  return useQuery<number[][]>({
+    queryKey: ["ca-coin-ohlc", coinId, days],
+    queryFn: async () => {
+      const r = await fetch(`/api/coins/${coinId}/ohlc?days=${days}`);
+      if (!r.ok) throw new Error(`ohlc ${r.status}`);
       return r.json();
     },
     enabled: !!coinId,

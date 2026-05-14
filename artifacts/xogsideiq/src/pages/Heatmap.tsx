@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useLocation } from "wouter";
 import { LayoutGrid, TrendingUp, TrendingDown, RefreshCw, Activity } from "lucide-react";
 import { useLiveCoins } from "@/hooks/use-market-data";
 import type { LiveCoin } from "@/hooks/use-market-data";
@@ -251,6 +252,7 @@ function Tooltip({ coin, x, y, containerW }: { coin: HeatCoin; x: number; y: num
 /* ── Main Component ─────────────────────────────────────────────────────────── */
 
 export default function Heatmap() {
+  const [, setLocation]           = useLocation();
   const [view, setView]           = useState<TimeView>("24h");
   const [sectorFilter, setSector] = useState<string>("All");
   const [hovered, setHovered]     = useState<{ coin: HeatCoin; x: number; y: number } | null>(null);
@@ -445,6 +447,7 @@ export default function Heatmap() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.18 }}
+              onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
               onMouseEnter={e => {
                 const rect = containerRef.current?.getBoundingClientRect();
                 if (rect) setHovered({ coin, x: e.clientX - rect.left, y: e.clientY - rect.top });

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Sparkles, Brain, TrendingUp, TrendingDown, Zap, Shield, AlertTriangle,
   ArrowUp, ArrowDown, ChevronRight, RefreshCw, Star, BarChart2,
@@ -52,6 +52,7 @@ const NARRATIVES = [
 ];
 
 export default function AiInsights() {
+  const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"predictions" | "narratives" | "alerts">("predictions");
   const [sentimentFilter, setSentimentFilter] = useState<string>("ALL");
 
@@ -201,6 +202,7 @@ export default function AiInsights() {
                     transition={{ delay: Math.min(i * 0.04, 0.5) }}
                     className="rounded-2xl p-4 transition-all cursor-pointer"
                     style={{ background: "rgba(13,17,26,0.85)", border: `1px solid rgba(255,255,255,0.06)` }}
+                    onClick={() => setLocation(`/research/${c.coin}`)}
                     onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = `${sentColor}30`}
                     onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.06)"}>
                     <div className="flex items-center gap-2 mb-3">
