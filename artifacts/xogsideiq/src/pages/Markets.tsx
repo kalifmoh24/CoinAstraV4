@@ -55,16 +55,39 @@ type SortDir = "asc" | "desc";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CATEGORIES: Record<string, string[]> = {
-  All: [],
-  DeFi: ["uniswap","aave","maker","compound-coin","curve-dao-token","synthetix","yearn-finance","sushi","balancer","1inch","pancakeswap-token","convex-finance","lido-dao"],
-  "Layer 1": ["bitcoin","ethereum","solana","avalanche-2","cardano","polkadot","cosmos","near","algorand","tron","fantom","aptos","sui"],
-  "Layer 2": ["matic-network","arbitrum","optimism","loopring","metis-token","immutable-x","starknet"],
-  Meme: ["dogecoin","shiba-inu","pepe","floki","bonk","baby-doge-coin","dogelon-mars"],
-  AI: ["fetch-ai","singularitynet","ocean-protocol","render-token","worldcoin-wld","bittensor","akash-network"],
-  Gaming: ["axie-infinity","the-sandbox","decentraland","gala","illuvium","gods-unchained"],
-  Stablecoins: ["tether","usd-coin","binance-usd","dai","true-usd","frax","usdd"],
+// Maps display label → CoinGecko category ID (null = All)
+const CATEGORY_MAP: Record<string, string | null> = {
+  "All":           null,
+  "DeFi":          "decentralized-finance-defi",
+  "Layer 1":       "layer-1",
+  "Layer 2":       "layer-2",
+  "Meme":          "meme-token",
+  "AI":            "artificial-intelligence",
+  "Gaming":        "gaming",
+  "Stablecoins":   "stablecoins",
+  "RWA":           "real-world-assets-rwa",
+  "DePIN":         "decentralized-physical-infrastructure-networks-depin",
+  "NFT":           "non-fungible-tokens-nft",
+  "Metaverse":     "metaverse",
+  "Oracle":        "oracle",
+  "Exchange":      "exchange-based-tokens",
+  "Privacy":       "privacy-coins",
+  "Infrastructure":"infrastructure",
+  "Dog Meme":      "dog-themed-coins",
+  "Cat Meme":      "cat-themed-coins",
+  "BTC Ecosystem": "bitcoin-ecosystem",
+  "ETH Ecosystem": "ethereum-ecosystem",
+  "SOL Ecosystem": "solana-ecosystem",
+  "BNB Chain":     "bnb-chain-ecosystem",
+  "Liquid Staking":"liquid-staking-tokens",
+  "Bridge":        "bridge-governance-tokens",
+  "Derivatives":   "derivatives",
+  "Sports":        "sports",
+  "Fan Token":     "fan-token",
+  "Wrapped":       "wrapped-tokens",
 };
+
+const CATEGORY_LABELS = Object.keys(CATEGORY_MAP);
 
 const NAV = [
   { path: "/",          label: "Dashboard", icon: LayoutDashboard },
@@ -107,8 +130,13 @@ function fmtSupply(n: number, sym: string): string {
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 async function fetchMarkets(page: number): Promise<CoinMarket[]> {
-  const res = await fetch(`/api/coins/markets?per_page=100&page=${page}&sparkline=true&price_change_percentage=1h,7d`);
+  const res = await fetch(`/api/coins/markets?per_page=250&page=${page}&sparkline=true&price_change_percentage=1h,7d`);
   if (!res.ok) throw new Error(`markets ${res.status}`);
+  return res.json();
+}
+async function fetchCategoryCoins(categoryId: string, page: number): Promise<CoinMarket[]> {
+  const res = await fetch(`/api/coins/markets?per_page=250&page=${page}&category=${encodeURIComponent(categoryId)}&sparkline=true&price_change_percentage=1h,7d`);
+  if (!res.ok) throw new Error(`category ${res.status}`);
   return res.json();
 }
 async function fetchGlobal(): Promise<{ data: GlobalData }> {
@@ -295,7 +323,7 @@ function MobileCategoryBar({ category, setCategory }: {
 }) {
   return (
     <div className="flex gap-2 px-4 py-2 overflow-x-auto" style={{ WebkitOverflowScrolling:"touch" }}>
-      {Object.keys(CATEGORIES).map(cat => {
+      {CATEGORY_LABELS.map(cat => {
         const active = category === cat;
         return (
           <button key={cat} onClick={() => setCategory(cat)}
@@ -488,14 +516,38 @@ export default function Markets() {
   });
   const g = globalRaw?.data;
 
-  // Live CoinGecko search — fires when local search yields no results
+  // ── Category-based data ────────────────────────────────────────────────────
+  const activeCategoryId = CATEGORY_MAP[category] ?? null;
+  const isCategoryMode = activeCategoryId !== null;
+
+  const {
+    data: categoryCoins,
+    isLoading: categoryLoading,
+    isError: categoryError,
+  } = useQuery({
+    queryKey: ["cg-category-markets", activeCategoryId, page],
+    queryFn: () => fetchCategoryCoins(activeCategoryId!, page),
+    enabled: isCategoryMode,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    retry: 2,
+  });
+
+  // ── Live search (fires for any query >= 1 char) ───────────────────────────
+  const isSearchMode = debouncedSearch.length >= 1;
   const { data: liveSearchData, isFetching: searchFetching } = useQuery({
     queryKey: ["cg-search-markets", debouncedSearch],
     queryFn: () => fetchCoinSearchMarkets(debouncedSearch),
-    enabled: debouncedSearch.length >= 2,
+    enabled: isSearchMode,
     staleTime: 30_000,
   });
   const liveSearchCoins = liveSearchData?.coins ?? [];
+
+  // ── Resolved coin list ─────────────────────────────────────────────────────
+  // In search mode: live CoinGecko search results
+  // In category mode: category coins
+  // Otherwise: paginated markets
+  const baseCoins: CoinMarket[] = isCategoryMode ? (categoryCoins ?? []) : (coins ?? []);
 
   // ── Countdown ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -506,16 +558,7 @@ export default function Markets() {
 
   // ── Filter + Sort ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    if (!coins) return [];
-    let list = [...coins];
-    if (category !== "All") {
-      const ids = CATEGORIES[category] ?? [];
-      list = list.filter(c => ids.includes(c.id));
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(c => c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q));
-    }
+    let list = [...baseCoins];
     list.sort((a,b) => {
       let av=0, bv=0;
       if (sortKey==="rank")  { av=a.market_cap_rank; bv=b.market_cap_rank; }
@@ -528,7 +571,9 @@ export default function Markets() {
       return sortDir==="asc" ? av-bv : bv-av;
     });
     return list;
-  }, [coins, category, search, sortKey, sortDir]);
+  }, [baseCoins, sortKey, sortDir]);
+
+  const effectiveLoading = isLoading || (isCategoryMode && categoryLoading);
 
   const handleSort = useCallback((k: SortKey) => {
     if (sortKey===k) setSortDir(d => d==="asc"?"desc":"asc");
@@ -835,10 +880,10 @@ export default function Markets() {
                 <span className="text-[11px] font-mono" style={{ color:"#4a5068" }}>{filtered.length} coins</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {Object.keys(CATEGORIES).map(cat => {
+                {CATEGORY_LABELS.map(cat => {
                   const active = category === cat;
                   return (
-                    <button key={cat} onClick={() => setCategory(cat)}
+                    <button key={cat} onClick={() => { setCategory(cat); setPage(1); }}
                       className="px-3 h-8 rounded-full text-[10px] font-semibold transition-all"
                       style={{ background: active?"rgba(41,98,255,0.22)":"rgba(42,46,57,0.6)",
                         color: active?"#4d7fff":"#5a6072",
@@ -883,58 +928,82 @@ export default function Markets() {
                       </tr>
                     </thead>
                     <tbody>
-                      {isLoading
+                      {effectiveLoading
                         ? Array.from({length:18}).map((_,i) => <TabletSkelRow key={i} i={i}/>)
-                        : filtered.map((coin, idx) => {
-                            const is7dPos = (coin.price_change_percentage_7d_in_currency ?? 0) >= 0;
-                            const isWatched = watchlist.has(coin.id);
-                            return (
-                              <motion.tr key={coin.id}
-                                initial={{ opacity:0 }} animate={{ opacity:1 }}
-                                transition={{ duration:0.1, delay:Math.min(idx*0.008,0.3) }}
-                                className="group"
-                                style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
-                                onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
-                                onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background="rgba(41,98,255,0.04)"; }}
-                                onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background="transparent"; }}>
-                                <td className="pl-4 pr-2 py-3" onClick={e => e.stopPropagation()}>
-                                  <Star size={13} style={{ color:isWatched?"#f7931a":"#2a2e3a", fill:isWatched?"#f7931a":"none", cursor:"pointer" }}
-                                    onClick={() => toggleWatch(coin.id)} />
-                                </td>
-                                <td className="px-3 py-3 text-[11px] font-mono tabular-nums" style={{ color:"#5a6072" }}>
-                                  {coin.market_cap_rank}
-                                </td>
-                                <td className="px-3 py-3">
-                                  <div className="flex items-center gap-2">
-                                    <img src={coin.image} alt={coin.name} loading="lazy"
-                                      className="w-7 h-7 rounded-full shrink-0" />
-                                    <div>
-                                      <div className="text-[12px] font-bold text-white truncate" style={{ maxWidth:120 }}>{coin.name}</div>
-                                      <div className="text-[9px] font-semibold uppercase" style={{ color:"#5a6072" }}>{coin.symbol}</div>
+                        : isSearchMode
+                          ? searchFetching
+                            ? Array.from({length:8}).map((_,i) => <TabletSkelRow key={i} i={i}/>)
+                            : liveSearchCoins.map((c, idx) => (
+                                <motion.tr key={c.id}
+                                  initial={{ opacity:0 }} animate={{ opacity:1 }}
+                                  transition={{ duration:0.1, delay:Math.min(idx*0.008,0.25) }}
+                                  className="group"
+                                  style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
+                                  onClick={() => setLocation(`/research/${c.symbol.toUpperCase()}`)}>
+                                  <td className="pl-4 pr-2 py-3" />
+                                  <td className="px-3 py-3 text-[11px] font-mono tabular-nums" style={{ color:"#5a6072" }}>{c.market_cap_rank||"—"}</td>
+                                  <td className="px-3 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <img src={c.thumb} alt={c.name} loading="lazy" className="w-7 h-7 rounded-full shrink-0" />
+                                      <div>
+                                        <div className="text-[12px] font-bold text-white">{c.name}</div>
+                                        <div className="text-[9px] font-semibold uppercase" style={{ color:"#5a6072" }}>{c.symbol}</div>
+                                      </div>
                                     </div>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-3 text-right text-[12px] font-bold text-white font-mono tabular-nums">
-                                  {fmtPrice(coin.current_price)}
-                                </td>
-                                <td className="px-3 py-3 text-right"><ChangeCell v={coin.price_change_percentage_24h} badge /></td>
-                                <td className="px-3 py-3 text-right"><ChangeCell v={coin.price_change_percentage_7d_in_currency} /></td>
-                                <td className="px-3 py-3 text-right text-[11px] font-mono text-[#d1d4dc] tabular-nums">
-                                  {fmtLarge(coin.market_cap)}
-                                </td>
-                                <td className="px-3 py-3 text-right text-[11px] font-mono text-[#d1d4dc] tabular-nums">
-                                  {fmtLarge(coin.total_volume)}
-                                </td>
-                                <td className="px-3 py-3 text-right">
-                                  <MiniSparkline prices={coin.sparkline_in_7d?.price??[]} isPos={is7dPos} id={`t_${coin.id}_${page}`} />
-                                </td>
-                              </motion.tr>
-                            );
-                          })
+                                  </td>
+                                  <td colSpan={6} className="px-3 py-3 text-right text-[11px]" style={{ color:"#5a6072" }}>Click to view →</td>
+                                </motion.tr>
+                              ))
+                          : filtered.map((coin, idx) => {
+                              const is7dPos = (coin.price_change_percentage_7d_in_currency ?? 0) >= 0;
+                              const isWatched = watchlist.has(coin.id);
+                              return (
+                                <motion.tr key={coin.id}
+                                  initial={{ opacity:0 }} animate={{ opacity:1 }}
+                                  transition={{ duration:0.1, delay:Math.min(idx*0.008,0.3) }}
+                                  className="group"
+                                  style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
+                                  onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
+                                  onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background="rgba(41,98,255,0.04)"; }}
+                                  onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background="transparent"; }}>
+                                  <td className="pl-4 pr-2 py-3" onClick={e => e.stopPropagation()}>
+                                    <Star size={13} style={{ color:isWatched?"#f7931a":"#2a2e3a", fill:isWatched?"#f7931a":"none", cursor:"pointer" }}
+                                      onClick={() => toggleWatch(coin.id)} />
+                                  </td>
+                                  <td className="px-3 py-3 text-[11px] font-mono tabular-nums" style={{ color:"#5a6072" }}>
+                                    {coin.market_cap_rank}
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <img src={coin.image} alt={coin.name} loading="lazy"
+                                        className="w-7 h-7 rounded-full shrink-0" />
+                                      <div>
+                                        <div className="text-[12px] font-bold text-white truncate" style={{ maxWidth:120 }}>{coin.name}</div>
+                                        <div className="text-[9px] font-semibold uppercase" style={{ color:"#5a6072" }}>{coin.symbol}</div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-3 text-right text-[12px] font-bold text-white font-mono tabular-nums">
+                                    {fmtPrice(coin.current_price)}
+                                  </td>
+                                  <td className="px-3 py-3 text-right"><ChangeCell v={coin.price_change_percentage_24h} badge /></td>
+                                  <td className="px-3 py-3 text-right"><ChangeCell v={coin.price_change_percentage_7d_in_currency} /></td>
+                                  <td className="px-3 py-3 text-right text-[11px] font-mono text-[#d1d4dc] tabular-nums">
+                                    {fmtLarge(coin.market_cap)}
+                                  </td>
+                                  <td className="px-3 py-3 text-right text-[11px] font-mono text-[#d1d4dc] tabular-nums">
+                                    {fmtLarge(coin.total_volume)}
+                                  </td>
+                                  <td className="px-3 py-3 text-right">
+                                    <MiniSparkline prices={coin.sparkline_in_7d?.price??[]} isPos={is7dPos} id={`t_${coin.id}_${page}`} />
+                                  </td>
+                                </motion.tr>
+                              );
+                            })
                       }
                     </tbody>
                   </table>
-                  {!isLoading && filtered.length===0 && (
+                  {!effectiveLoading && !isSearchMode && filtered.length===0 && (
                     <div className="flex flex-col items-center py-12">
                       <Search size={28} className="text-white mb-2 opacity-20" />
                       <p className="text-[13px] font-semibold text-white mb-1">No coins found</p>
@@ -942,6 +1011,17 @@ export default function Markets() {
                         className="mt-2 px-4 py-1.5 rounded-xl text-[11px] font-medium"
                         style={{ background:"rgba(41,98,255,0.15)", color:"#4d7fff", border:"1px solid rgba(41,98,255,0.3)" }}>
                         Clear filters
+                      </button>
+                    </div>
+                  )}
+                  {!effectiveLoading && isSearchMode && !searchFetching && liveSearchCoins.length===0 && (
+                    <div className="flex flex-col items-center py-12">
+                      <Search size={28} className="text-white mb-2 opacity-20" />
+                      <p className="text-[13px] font-semibold text-white mb-1">No results for "{debouncedSearch}"</p>
+                      <button onClick={() => setSearch("")}
+                        className="mt-2 px-4 py-1.5 rounded-xl text-[11px] font-medium"
+                        style={{ background:"rgba(41,98,255,0.15)", color:"#4d7fff", border:"1px solid rgba(41,98,255,0.3)" }}>
+                        Clear search
                       </button>
                     </div>
                   )}
@@ -1134,10 +1214,10 @@ export default function Markets() {
               </div>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {Object.keys(CATEGORIES).map(cat => {
+              {CATEGORY_LABELS.map(cat => {
                 const active = category===cat;
                 return (
-                  <button key={cat} onClick={() => setCategory(cat)}
+                  <button key={cat} onClick={() => { setCategory(cat); setPage(1); }}
                     className="px-3 h-7 rounded-full text-[10px] font-semibold transition-all"
                     style={{ background:active?"rgba(41,98,255,0.22)":"rgba(42,46,57,0.6)",
                       color:active?"#4d7fff":"#5a6072",
@@ -1194,116 +1274,117 @@ export default function Markets() {
                     </tr>
                   </thead>
                   <tbody>
-                    {isLoading
+                    {effectiveLoading
                       ? Array.from({length:25}).map((_,i) => <DeskSkelRow key={i} i={i}/>)
-                      : filtered.map((coin,idx) => {
-                          const is7dPos = (coin.price_change_percentage_7d_in_currency ?? 0) >= 0;
-                          const supplyPct = coin.max_supply
-                            ? Math.min(100,(coin.circulating_supply/coin.max_supply)*100)
-                            : coin.total_supply ? Math.min(100,(coin.circulating_supply/coin.total_supply)*100) : 100;
-                          const isWatched = watchlist.has(coin.id);
-                          return (
-                            <motion.tr key={coin.id}
-                              initial={{ opacity:0 }} animate={{ opacity:1 }}
-                              transition={{ duration:0.1, delay:Math.min(idx*0.007,0.3) }}
-                              style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
-                              onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
-                              onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background="rgba(41,98,255,0.04)"; }}
-                              onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background="transparent"; }}>
-                              <td className="pl-4 pr-2 py-3.5" onClick={e => e.stopPropagation()}>
-                                <Star size={14} style={{ color:isWatched?"#f7931a":"#2a2e3a", fill:isWatched?"#f7931a":"none", cursor:"pointer" }}
-                                  onClick={() => toggleWatch(coin.id)} />
-                              </td>
-                              <td className="px-3 py-3.5 text-[11px] font-mono tabular-nums" style={{ color:"#5a6072" }}>
-                                {coin.market_cap_rank}
-                              </td>
-                              <td className="px-3 py-3.5">
-                                <div className="flex items-center gap-2.5">
-                                  <img src={coin.image} alt={coin.name} loading="lazy"
-                                    className="w-7 h-7 rounded-full shrink-0" style={{ boxShadow:"0 0 8px rgba(0,0,0,0.4)" }} />
-                                  <div className="min-w-0">
-                                    <div className="text-[12px] font-bold text-white leading-none truncate" style={{ maxWidth:130 }}>{coin.name}</div>
-                                    <div className="text-[9px] font-semibold uppercase mt-0.5" style={{ color:"#5a6072" }}>{coin.symbol}</div>
+                      : isSearchMode
+                        ? searchFetching
+                          ? Array.from({length:10}).map((_,i) => <DeskSkelRow key={i} i={i}/>)
+                          : liveSearchCoins.map((c,idx) => (
+                              <motion.tr key={c.id}
+                                initial={{ opacity:0 }} animate={{ opacity:1 }}
+                                transition={{ duration:0.1, delay:Math.min(idx*0.007,0.25) }}
+                                style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
+                                onClick={() => setLocation(`/research/${c.symbol.toUpperCase()}`)}
+                                onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background="rgba(41,98,255,0.05)"; }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background="transparent"; }}>
+                                <td className="pl-4 pr-2 py-3.5" />
+                                <td className="px-3 py-3.5 text-[11px] font-mono tabular-nums" style={{ color:"#5a6072" }}>{c.market_cap_rank||"—"}</td>
+                                <td className="px-3 py-3.5">
+                                  <div className="flex items-center gap-2.5">
+                                    <img src={c.thumb} alt={c.name} loading="lazy" className="w-7 h-7 rounded-full shrink-0"
+                                      onError={e => { (e.currentTarget as HTMLImageElement).style.display="none"; }} />
+                                    <div>
+                                      <div className="text-[12px] font-bold text-white">{c.name}</div>
+                                      <div className="text-[9px] font-semibold uppercase mt-0.5" style={{ color:"#5a6072" }}>{c.symbol}</div>
+                                    </div>
                                   </div>
-                                </div>
-                              </td>
-                              <td className="px-3 py-3.5 text-right">
-                                <span className="text-[12px] font-bold text-white font-mono tabular-nums">{fmtPrice(coin.current_price)}</span>
-                              </td>
-                              <td className="px-3 py-3.5 text-right"><ChangeCell v={coin.price_change_percentage_1h_in_currency} /></td>
-                              <td className="px-3 py-3.5 text-right"><ChangeCell v={coin.price_change_percentage_24h} badge /></td>
-                              <td className="px-3 py-3.5 text-right"><ChangeCell v={coin.price_change_percentage_7d_in_currency} /></td>
-                              <td className="px-3 py-3.5 text-right text-[11px] font-mono text-[#d1d4dc] tabular-nums">{fmtLarge(coin.market_cap)}</td>
-                              <td className="px-3 py-3.5 text-right">
-                                <div className="text-[11px] font-mono text-[#d1d4dc] tabular-nums">{fmtLarge(coin.total_volume)}</div>
-                                {coin.market_cap>0 && <div className="text-[8px] mt-0.5" style={{ color:"#5a6072" }}>{((coin.total_volume/coin.market_cap)*100).toFixed(1)}% of cap</div>}
-                              </td>
-                              <td className="px-3 py-3.5 text-right" style={{ minWidth:130 }}>
-                                <div className="text-[10px] font-mono text-[#d1d4dc] tabular-nums">{fmtSupply(coin.circulating_supply,coin.symbol)}</div>
-                                <div className="flex items-center justify-end gap-1.5 mt-1">
-                                  <div className="w-16 h-1 rounded-full overflow-hidden" style={{ background:"rgba(255,255,255,0.07)" }}>
-                                    <div className="h-full rounded-full transition-all" style={{ width:`${supplyPct}%`,
-                                      background: supplyPct>80?"#26a69a":supplyPct>50?"#f7931a":"#2962ff" }} />
+                                </td>
+                                <td colSpan={8} className="px-3 py-3.5 text-right text-[11px]" style={{ color:"#4a5068" }}>
+                                  Click to view full chart →
+                                </td>
+                              </motion.tr>
+                            ))
+                        : filtered.map((coin,idx) => {
+                            const is7dPos = (coin.price_change_percentage_7d_in_currency ?? 0) >= 0;
+                            const supplyPct = coin.max_supply
+                              ? Math.min(100,(coin.circulating_supply/coin.max_supply)*100)
+                              : coin.total_supply ? Math.min(100,(coin.circulating_supply/coin.total_supply)*100) : 100;
+                            const isWatched = watchlist.has(coin.id);
+                            return (
+                              <motion.tr key={coin.id}
+                                initial={{ opacity:0 }} animate={{ opacity:1 }}
+                                transition={{ duration:0.1, delay:Math.min(idx*0.007,0.3) }}
+                                style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
+                                onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
+                                onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background="rgba(41,98,255,0.04)"; }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background="transparent"; }}>
+                                <td className="pl-4 pr-2 py-3.5" onClick={e => e.stopPropagation()}>
+                                  <Star size={14} style={{ color:isWatched?"#f7931a":"#2a2e3a", fill:isWatched?"#f7931a":"none", cursor:"pointer" }}
+                                    onClick={() => toggleWatch(coin.id)} />
+                                </td>
+                                <td className="px-3 py-3.5 text-[11px] font-mono tabular-nums" style={{ color:"#5a6072" }}>
+                                  {coin.market_cap_rank}
+                                </td>
+                                <td className="px-3 py-3.5">
+                                  <div className="flex items-center gap-2.5">
+                                    <img src={coin.image} alt={coin.name} loading="lazy"
+                                      className="w-7 h-7 rounded-full shrink-0" style={{ boxShadow:"0 0 8px rgba(0,0,0,0.4)" }} />
+                                    <div className="min-w-0">
+                                      <div className="text-[12px] font-bold text-white leading-none truncate" style={{ maxWidth:130 }}>{coin.name}</div>
+                                      <div className="text-[9px] font-semibold uppercase mt-0.5" style={{ color:"#5a6072" }}>{coin.symbol}</div>
+                                    </div>
                                   </div>
-                                  <span className="text-[8px] font-mono tabular-nums" style={{ color:"#5a6072" }}>{supplyPct.toFixed(0)}%</span>
-                                </div>
-                              </td>
-                              <td className="px-3 py-3.5 text-right">
-                                <MiniSparkline prices={coin.sparkline_in_7d?.price??[]} isPos={is7dPos} id={`d_${coin.id}_${page}`} />
-                              </td>
-                            </motion.tr>
-                          );
-                        })
+                                </td>
+                                <td className="px-3 py-3.5 text-right">
+                                  <span className="text-[12px] font-bold text-white font-mono tabular-nums">{fmtPrice(coin.current_price)}</span>
+                                </td>
+                                <td className="px-3 py-3.5 text-right"><ChangeCell v={coin.price_change_percentage_1h_in_currency} /></td>
+                                <td className="px-3 py-3.5 text-right"><ChangeCell v={coin.price_change_percentage_24h} badge /></td>
+                                <td className="px-3 py-3.5 text-right"><ChangeCell v={coin.price_change_percentage_7d_in_currency} /></td>
+                                <td className="px-3 py-3.5 text-right text-[11px] font-mono text-[#d1d4dc] tabular-nums">{fmtLarge(coin.market_cap)}</td>
+                                <td className="px-3 py-3.5 text-right">
+                                  <div className="text-[11px] font-mono text-[#d1d4dc] tabular-nums">{fmtLarge(coin.total_volume)}</div>
+                                  {coin.market_cap>0 && <div className="text-[8px] mt-0.5" style={{ color:"#5a6072" }}>{((coin.total_volume/coin.market_cap)*100).toFixed(1)}% of cap</div>}
+                                </td>
+                                <td className="px-3 py-3.5 text-right" style={{ minWidth:130 }}>
+                                  <div className="text-[10px] font-mono text-[#d1d4dc] tabular-nums">{fmtSupply(coin.circulating_supply,coin.symbol)}</div>
+                                  <div className="flex items-center justify-end gap-1.5 mt-1">
+                                    <div className="w-16 h-1 rounded-full overflow-hidden" style={{ background:"rgba(255,255,255,0.07)" }}>
+                                      <div className="h-full rounded-full transition-all" style={{ width:`${supplyPct}%`,
+                                        background: supplyPct>80?"#26a69a":supplyPct>50?"#f7931a":"#2962ff" }} />
+                                    </div>
+                                    <span className="text-[8px] font-mono tabular-nums" style={{ color:"#5a6072" }}>{supplyPct.toFixed(0)}%</span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-3.5 text-right">
+                                  <MiniSparkline prices={coin.sparkline_in_7d?.price??[]} isPos={is7dPos} id={`d_${coin.id}_${page}`} />
+                                </td>
+                              </motion.tr>
+                            );
+                          })
                     }
                   </tbody>
                 </table>
-                {!isLoading && filtered.length===0 && (
-                  <div className="py-6 px-4">
-                    {searchFetching && (
-                      <div className="flex items-center justify-center gap-2 py-6">
-                        <Search size={14} style={{ color:"#4d7fff" }} className="animate-pulse" />
-                        <span className="text-[12px]" style={{ color:"#5a6072" }}>Searching CoinGecko…</span>
-                      </div>
-                    )}
-                    {!searchFetching && liveSearchCoins.length > 0 && (
-                      <div>
-                        <div className="text-[10px] font-bold uppercase tracking-wider mb-3 px-1" style={{ color:"#4a5068" }}>
-                          Live Search Results
-                        </div>
-                        <div className="space-y-1">
-                          {liveSearchCoins.map(coin => (
-                            <div key={coin.id}
-                              onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
-                              className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all"
-                              style={{ background:"rgba(41,98,255,0.04)", border:"1px solid rgba(255,255,255,0.04)" }}
-                              onMouseEnter={e => (e.currentTarget.style.background="rgba(41,98,255,0.1)")}
-                              onMouseLeave={e => (e.currentTarget.style.background="rgba(41,98,255,0.04)")}>
-                              <img src={coin.thumb} alt={coin.name} className="w-7 h-7 rounded-full shrink-0"
-                                onError={e => { (e.currentTarget as HTMLImageElement).style.display="none"; }} />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-[12px] font-bold text-white">{coin.name}</div>
-                                <div className="text-[9px] uppercase font-mono" style={{ color:"#5a6072" }}>{coin.symbol}</div>
-                              </div>
-                              {coin.market_cap_rank && (
-                                <span className="text-[9px] font-mono" style={{ color:"#5a6072" }}>#{coin.market_cap_rank}</span>
-                              )}
-                              <ChevronRight size={12} style={{ color:"#3a4058" }} />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {!searchFetching && liveSearchCoins.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-10">
-                        <Search size={28} className="text-white mb-3 opacity-20" />
-                        <p className="text-[13px] font-semibold text-white mb-1">No coins found</p>
-                        <button onClick={() => { setSearch(""); setCategory("All"); }}
-                          className="mt-2 px-4 py-1.5 rounded-xl text-[11px] font-medium"
-                          style={{ background:"rgba(41,98,255,0.15)", color:"#4d7fff", border:"1px solid rgba(41,98,255,0.3)" }}>
-                          Clear filters
-                        </button>
-                      </div>
-                    )}
+                {!effectiveLoading && isSearchMode && !searchFetching && liveSearchCoins.length===0 && (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Search size={28} className="text-white mb-3 opacity-20" />
+                    <p className="text-[13px] font-semibold text-white mb-1">No results for "{debouncedSearch}"</p>
+                    <button onClick={() => setSearch("")}
+                      className="mt-2 px-4 py-1.5 rounded-xl text-[11px] font-medium"
+                      style={{ background:"rgba(41,98,255,0.15)", color:"#4d7fff", border:"1px solid rgba(41,98,255,0.3)" }}>
+                      Clear search
+                    </button>
+                  </div>
+                )}
+                {!effectiveLoading && !isSearchMode && filtered.length===0 && (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Search size={28} className="text-white mb-3 opacity-20" />
+                    <p className="text-[13px] font-semibold text-white mb-1">No coins found</p>
+                    <button onClick={() => { setSearch(""); setCategory("All"); }}
+                      className="mt-2 px-4 py-1.5 rounded-xl text-[11px] font-medium"
+                      style={{ background:"rgba(41,98,255,0.15)", color:"#4d7fff", border:"1px solid rgba(41,98,255,0.3)" }}>
+                      Clear filters
+                    </button>
                   </div>
                 )}
               </div>
@@ -1313,7 +1394,7 @@ export default function Markets() {
           {/* Desktop CARDS */}
           {!isError && view==="cards" && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-              {isLoading
+              {effectiveLoading
                 ? Array.from({length:24}).map((_,i) => (
                     <div key={i} className="rounded-2xl h-44 animate-pulse"
                       style={{ background:"rgba(13,17,26,0.6)", animationDelay:`${i*30}ms` }} />
@@ -1384,12 +1465,14 @@ export default function Markets() {
           )}
 
           {/* Desktop Pagination */}
-          {!isError && !isLoading && filtered.length > 0 && (
+          {!isError && !effectiveLoading && !isSearchMode && filtered.length > 0 && !isCategoryMode && (
             <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.4 }}
               className="flex flex-col sm:flex-row items-center justify-between mt-5 gap-3 px-4 py-3 rounded-2xl"
               style={{ background:"rgba(13,17,26,0.7)", border:"1px solid rgba(255,255,255,0.05)" }}>
               <p className="text-[11px]" style={{ color:"#5a6072" }}>
-                Page <span className="font-bold text-white">{page}</span> · Showing <span className="font-bold text-white">{filtered.length}</span> coins
+                Page <span className="font-bold text-white">{page}</span> of 40 ·{" "}
+                Showing <span className="font-bold text-white">{filtered.length}</span> coins ·{" "}
+                <span style={{ color:"#4a5068" }}>Up to 10,000 coins across all pages</span>
               </p>
               <div className="flex items-center gap-2">
                 <button onClick={() => handlePage(Math.max(1,page-1))} disabled={page===1}
@@ -1397,18 +1480,28 @@ export default function Markets() {
                   style={{ background:"rgba(42,46,57,0.8)", border:"1px solid rgba(255,255,255,0.07)", color:"#a0a8bc" }}>
                   <ChevronLeft size={16}/> Prev
                 </button>
-                {[1,2,3,4,5].map(p => (
-                  <button key={p} onClick={() => handlePage(p)}
-                    className="w-9 h-9 rounded-xl text-[11px] font-bold transition-all"
-                    style={{ background:page===p?"rgba(41,98,255,0.25)":"rgba(42,46,57,0.6)",
-                      color:page===p?"#4d7fff":"#5a6072",
-                      border:page===p?"1px solid rgba(41,98,255,0.45)":"1px solid rgba(255,255,255,0.06)",
-                      boxShadow:page===p?"0 0 16px rgba(41,98,255,0.25)":"none" }}>
-                    {p}
-                  </button>
-                ))}
-                <button onClick={() => handlePage(page+1)}
-                  className="flex items-center gap-1.5 px-3 h-9 rounded-xl text-[11px] font-semibold transition-all"
+                {(() => {
+                  const maxPage = 40;
+                  const pages: number[] = [];
+                  if (page > 3) pages.push(1);
+                  for (let p = Math.max(1, page-2); p <= Math.min(maxPage, page+2); p++) pages.push(p);
+                  if (page < maxPage-2) pages.push(maxPage);
+                  return pages.filter((p,i,a) => a.indexOf(p)===i).map((p,i,a) => (
+                    <React.Fragment key={p}>
+                      {i>0 && a[i-1]!==p-1 && <span className="text-[#3a4058] text-xs">…</span>}
+                      <button onClick={() => handlePage(p)}
+                        className="w-9 h-9 rounded-xl text-[11px] font-bold transition-all"
+                        style={{ background:page===p?"rgba(41,98,255,0.25)":"rgba(42,46,57,0.6)",
+                          color:page===p?"#4d7fff":"#5a6072",
+                          border:page===p?"1px solid rgba(41,98,255,0.45)":"1px solid rgba(255,255,255,0.06)",
+                          boxShadow:page===p?"0 0 16px rgba(41,98,255,0.25)":"none" }}>
+                        {p}
+                      </button>
+                    </React.Fragment>
+                  ));
+                })()}
+                <button onClick={() => handlePage(Math.min(40, page+1))} disabled={page===40}
+                  className="flex items-center gap-1.5 px-3 h-9 rounded-xl text-[11px] font-semibold transition-all disabled:opacity-25"
                   style={{ background:"rgba(41,98,255,0.18)", border:"1px solid rgba(41,98,255,0.35)", color:"#4d7fff",
                     boxShadow:"0 0 14px rgba(41,98,255,0.15)" }}>
                   Next <ChevronRight size={16}/>

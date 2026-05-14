@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import {
   Brain, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Zap, Waves,
   Shield, Globe, Activity, BarChart2, Newspaper, Briefcase, Network, Bell,
@@ -185,6 +186,23 @@ function heatColor(ch: number): string {
 
 const TABLE_TABS = ["All", "AI Coins", "Meme", "Layer 1", "RWA", "DeFi", "Gaming", "DePIN"] as const;
 
+const TAB_CATEGORY_ID: Record<typeof TABLE_TABS[number], string | null> = {
+  "All":      null,
+  "AI Coins": "artificial-intelligence",
+  "Meme":     "meme-token",
+  "Layer 1":  "layer-1",
+  "RWA":      "real-world-assets-rwa",
+  "DeFi":     "decentralized-finance-defi",
+  "Gaming":   "gaming",
+  "DePIN":    "decentralized-physical-infrastructure-networks-depin",
+};
+
+async function fetchCategoryTop10(categoryId: string): Promise<any[]> {
+  const res = await fetch(`/api/coins/markets?per_page=10&page=1&category=${encodeURIComponent(categoryId)}&sparkline=false&price_change_percentage=1h,7d`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
 const MOCK_COINS = [
   { rank: 1, coin: "BTC", name: "Bitcoin", price: 67482.50, ch1h: 0.2, ch24: 2.4, ch7d: 4.8, vol: 42_000_000_000, mcap: 1_326_000_000_000, aiScore: 82, signal: "BUY", sentiment: "BULLISH", whale: "ACC", risk: "LOW" },
   { rank: 2, coin: "ETH", name: "Ethereum", price: 3248.75, ch1h: 0.4, ch24: 1.8, ch7d: 6.2, vol: 18_200_000_000, mcap: 390_000_000_000, aiScore: 79, signal: "BUY", sentiment: "BULLISH", whale: "ACC", risk: "LOW" },
@@ -226,6 +244,16 @@ export function DesktopDashboard() {
   const { data: overview } = useGetMarketOverview({ query: { queryKey: getGetMarketOverviewQueryKey() } });
   const liveMemeCoins = useMemeCoinLive();
 
+  const activeCategoryId = TAB_CATEGORY_ID[tableTab];
+  const { data: categoryCoins, isLoading: categoryLoading } = useQuery({
+    queryKey: ["dash-category-top10", activeCategoryId],
+    queryFn: () => fetchCategoryTop10(activeCategoryId!),
+    enabled: activeCategoryId !== null,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    retry: 2,
+  });
+
   const fg = fearGreedData?.data?.[0];
   const fgVal = fg ? parseInt(fg.value) : (overview?.fearGreedIndex ?? 42);
   const fgLabel = fg?.value_classification ?? overview?.fearGreedLabel ?? "Fear";
@@ -244,25 +272,30 @@ export function DesktopDashboard() {
   }), [btcCoin]);
 
   const liveTableCoins = useMemo(() => {
-    if (!cgCoins || cgCoins.length < 5) return MOCK_COINS;
-    return cgCoins.slice(0, 10).map((c, i) => {
+    // In category mode, use fetched category coins
+    const sourceCoins: any[] | null = activeCategoryId
+      ? (categoryCoins ?? null)
+      : (cgCoins ?? null);
+
+    if (!sourceCoins || sourceCoins.length < 1) return [];
+    return sourceCoins.slice(0, 10).map((c: any, i: number) => {
       const ai = analyzeToken({
-        priceChange24h: c.price_change_percentage_24h,
+        priceChange24h: c.price_change_percentage_24h ?? 0,
         priceChange7d: c.price_change_percentage_7d_in_currency ?? undefined,
-        volume24h: c.total_volume,
-        marketCap: c.market_cap,
-        symbol: c.symbol,
+        volume24h: c.total_volume ?? 0,
+        marketCap: c.market_cap ?? 0,
+        symbol: c.symbol ?? "",
       });
       return {
         rank: i + 1,
-        coin: c.symbol.toUpperCase(),
-        name: c.name,
-        price: c.current_price,
-        ch1h: 0,
-        ch24: c.price_change_percentage_24h,
+        coin: (c.symbol ?? "").toUpperCase(),
+        name: c.name ?? "",
+        price: c.current_price ?? 0,
+        ch1h: c.price_change_percentage_1h_in_currency ?? 0,
+        ch24: c.price_change_percentage_24h ?? 0,
         ch7d: c.price_change_percentage_7d_in_currency ?? 0,
-        vol: c.total_volume,
-        mcap: c.market_cap,
+        vol: c.total_volume ?? 0,
+        mcap: c.market_cap ?? 0,
         aiScore: ai.confidence,
         signal: ai.signal.replace(/_/g, " "),
         sentiment: ai.sentiment,
@@ -271,7 +304,9 @@ export function DesktopDashboard() {
         sparkCoin: c,
       };
     });
-  }, [cgCoins]);
+  }, [cgCoins, categoryCoins, activeCategoryId]);
+
+  const tableLoading = activeCategoryId ? categoryLoading : coinsLoading;
 
   const c = { border: "rgba(255,255,255,0.07)", card: "rgba(255,255,255,0.025)" };
 
@@ -481,8 +516,8 @@ export function DesktopDashboard() {
             ))}
           </div>
           {/* Rows */}
-          {(coinsLoading ? Array.from({ length: 8 }).map((_, i) => ({ id: i })) : liveTableCoins).map((row: any, i) => {
-            if (coinsLoading || !row.coin) {
+          {(tableLoading ? Array.from({ length: 8 }).map((_, i) => ({ id: i })) : liveTableCoins).map((row: any, i) => {
+            if (tableLoading || !row.coin) {
               return (
                 <div key={i} className="grid gap-2 px-4 py-3 border-b animate-pulse"
                   style={{ gridTemplateColumns: "32px 160px 100px 60px 70px 70px 90px 100px 80px 70px 60px 70px", borderColor: c.border }}>
