@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
   getCoinsMarkets,
+  getCoinsList,
   searchCoins,
   getCoinDetails,
   getCoinChart,
@@ -14,13 +15,24 @@ import {
 
 const router: IRouter = Router();
 
-/** GET /api/coins/markets?page=1&per_page=100&category=defi */
+/** GET /api/coins/markets?page=1&per_page=100&category=defi&ids=bitcoin,ethereum */
 router.get("/coins/markets", async (req, res, next): Promise<void> => {
   try {
     const page = Math.max(1, Number(req.query["page"]) || 1);
     const perPage = Math.min(250, Math.max(10, Number(req.query["per_page"]) || 100));
     const category = req.query["category"] ? String(req.query["category"]) : undefined;
-    const data = await getCoinsMarkets(page, perPage, category);
+    const ids = req.query["ids"] ? String(req.query["ids"]) : undefined;
+    const data = await getCoinsMarkets(page, perPage, category, ids);
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/coins/list — all coin IDs/symbols/names (~17k coins, cached 6h) */
+router.get("/coins/list", async (_req, res, next): Promise<void> => {
+  try {
+    const data = await getCoinsList();
     res.json(data);
   } catch (err) {
     next(err);

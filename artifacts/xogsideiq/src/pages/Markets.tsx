@@ -543,8 +543,37 @@ export default function Markets() {
   });
   const liveSearchCoins = liveSearchData?.coins ?? [];
 
+  // ── Enrich search results with live market data (prices, mcap, volume, sparkline)
+  const searchIds = useMemo(
+    () => liveSearchCoins.slice(0, 20).map(c => c.id).join(","),
+    [liveSearchCoins]
+  );
+  const { data: enrichedSearchData, isFetching: enrichFetching } = useQuery({
+    queryKey: ["cg-search-enriched", searchIds],
+    queryFn: async () => {
+      const res = await fetch(`/api/coins/markets?ids=${encodeURIComponent(searchIds)}&per_page=20&sparkline=true&price_change_percentage=1h,7d`);
+      if (!res.ok) return [] as CoinMarket[];
+      return res.json() as Promise<CoinMarket[]>;
+    },
+    enabled: isSearchMode && searchIds.length > 0 && !searchFetching,
+    staleTime: 30_000,
+    retry: 1,
+  });
+  // Preserve search order (search rank vs market cap rank)
+  const enrichedSearchCoins: CoinMarket[] = useMemo(() => {
+    if (!enrichedSearchData || enrichedSearchData.length === 0) return [];
+    const idOrder = liveSearchCoins.map(c => c.id);
+    return [...enrichedSearchData].sort((a, b) => {
+      const ai = idOrder.indexOf(a.id);
+      const bi = idOrder.indexOf(b.id);
+      return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+    });
+  }, [enrichedSearchData, liveSearchCoins]);
+
+  const searchLoading = searchFetching || (isSearchMode && searchIds.length > 0 && enrichFetching);
+
   // ── Resolved coin list ─────────────────────────────────────────────────────
-  // In search mode: live CoinGecko search results
+  // In search mode: enriched search results (full market data)
   // In category mode: category coins
   // Otherwise: paginated markets
   const baseCoins: CoinMarket[] = isCategoryMode ? (categoryCoins ?? []) : (coins ?? []);
@@ -574,6 +603,12 @@ export default function Markets() {
   }, [baseCoins, sortKey, sortDir]);
 
   const effectiveLoading = isLoading || (isCategoryMode && categoryLoading);
+
+  // ── Unified display list — what all three views render ────────────────────
+  // Search mode: enriched results (full price data for matched coins)
+  // Category/page mode: filtered paginated coins
+  const displayCoins: CoinMarket[] = isSearchMode ? enrichedSearchCoins : filtered;
+  const displayLoading: boolean    = isSearchMode ? searchLoading : effectiveLoading;
 
   const handleSort = useCallback((k: SortKey) => {
     if (sortKey===k) setSortDir(d => d==="asc"?"desc":"asc");
@@ -676,9 +711,9 @@ export default function Markets() {
           <div className="flex items-center justify-between pr-4"
             style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
             <MobileSortBar sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            {!isLoading && (
+            {!displayLoading && (
               <span className="text-[10px] font-mono shrink-0" style={{ color:"#3a4058" }}>
-                {filtered.length}
+                {displayCoins.length}
               </span>
             )}
           </div>
@@ -705,19 +740,31 @@ export default function Markets() {
           {/* Coin list */}
           {!isError && (
             <>
-              {isLoading
+              {displayLoading
                 ? Array.from({length:20}).map((_,i) => <MobileSkelRow key={i} i={i} />)
-                : filtered.map((coin, idx) => (
+                : displayCoins.map((coin, idx) => (
                     <MobileCoinRow key={coin.id} coin={coin} idx={idx}
                       isWatched={watchlist.has(coin.id)} onWatchlist={() => toggleWatch(coin.id)} />
                   ))
               }
-              {!isLoading && filtered.length === 0 && (
+              {!displayLoading && displayCoins.length === 0 && isSearchMode && (
+                <div className="flex flex-col items-center py-16 px-6 text-center">
+                  <Search size={32} className="mb-3 opacity-20 text-white" />
+                  <p className="text-[14px] font-bold text-white mb-1">No results for "{debouncedSearch}"</p>
+                  <p className="text-[12px] mb-4" style={{ color:"#5a6072" }}>Try a different name or ticker</p>
+                  <button onClick={() => setSearch("")}
+                    className="px-4 py-2 rounded-xl text-[12px] font-semibold"
+                    style={{ background:"rgba(41,98,255,0.15)", color:"#4d7fff", border:"1px solid rgba(41,98,255,0.3)" }}>
+                    Clear search
+                  </button>
+                </div>
+              )}
+              {!displayLoading && displayCoins.length === 0 && !isSearchMode && (
                 <div className="flex flex-col items-center py-16 px-6 text-center">
                   <Search size={32} className="mb-3 opacity-20 text-white" />
                   <p className="text-[14px] font-bold text-white mb-1">No coins found</p>
-                  <p className="text-[12px] mb-4" style={{ color:"#5a6072" }}>Try a different search or category</p>
-                  <button onClick={() => { setSearch(""); setCategory("All"); }}
+                  <p className="text-[12px] mb-4" style={{ color:"#5a6072" }}>Try a different category</p>
+                  <button onClick={() => setCategory("All")}
                     className="px-4 py-2 rounded-xl text-[12px] font-semibold"
                     style={{ background:"rgba(41,98,255,0.15)", color:"#4d7fff", border:"1px solid rgba(41,98,255,0.3)" }}>
                     Clear filters
@@ -892,7 +939,7 @@ export default function Markets() {
                     color: countdown<=5?"#ef5350":"#5a6072" }}>
                   <RefreshCw size={12}/> {countdown}s
                 </div>
-                <span className="text-[11px] font-mono" style={{ color:"#4a5068" }}>{filtered.length} coins</span>
+                <span className="text-[11px] font-mono" style={{ color:"#4a5068" }}>{displayCoins.length} coins</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {CATEGORY_LABELS.map(cat => {
@@ -943,33 +990,9 @@ export default function Markets() {
                       </tr>
                     </thead>
                     <tbody>
-                      {effectiveLoading
+                      {displayLoading
                         ? Array.from({length:18}).map((_,i) => <TabletSkelRow key={i} i={i}/>)
-                        : isSearchMode
-                          ? searchFetching
-                            ? Array.from({length:8}).map((_,i) => <TabletSkelRow key={i} i={i}/>)
-                            : liveSearchCoins.map((c, idx) => (
-                                <motion.tr key={c.id}
-                                  initial={{ opacity:0 }} animate={{ opacity:1 }}
-                                  transition={{ duration:0.1, delay:Math.min(idx*0.008,0.25) }}
-                                  className="group"
-                                  style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
-                                  onClick={() => setLocation(`/research/${c.symbol.toUpperCase()}`)}>
-                                  <td className="pl-4 pr-2 py-3" />
-                                  <td className="px-3 py-3 text-[11px] font-mono tabular-nums" style={{ color:"#5a6072" }}>{c.market_cap_rank||"—"}</td>
-                                  <td className="px-3 py-3">
-                                    <div className="flex items-center gap-2">
-                                      <img src={c.thumb} alt={c.name} loading="lazy" className="w-7 h-7 rounded-full shrink-0" />
-                                      <div>
-                                        <div className="text-[12px] font-bold text-white">{c.name}</div>
-                                        <div className="text-[9px] font-semibold uppercase" style={{ color:"#5a6072" }}>{c.symbol}</div>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td colSpan={6} className="px-3 py-3 text-right text-[11px]" style={{ color:"#5a6072" }}>Click to view →</td>
-                                </motion.tr>
-                              ))
-                          : filtered.map((coin, idx) => {
+                        : displayCoins.map((coin, idx) => {
                               const is7dPos = (coin.price_change_percentage_7d_in_currency ?? 0) >= 0;
                               const isWatched = watchlist.has(coin.id);
                               return (
@@ -1018,7 +1041,7 @@ export default function Markets() {
                       }
                     </tbody>
                   </table>
-                  {!effectiveLoading && !isSearchMode && filtered.length===0 && (
+                  {!displayLoading && !isSearchMode && displayCoins.length===0 && (
                     <div className="flex flex-col items-center py-12">
                       <Search size={28} className="text-white mb-2 opacity-20" />
                       <p className="text-[13px] font-semibold text-white mb-1">No coins found</p>
@@ -1029,7 +1052,7 @@ export default function Markets() {
                       </button>
                     </div>
                   )}
-                  {!effectiveLoading && isSearchMode && !searchFetching && liveSearchCoins.length===0 && (
+                  {!displayLoading && isSearchMode && displayCoins.length===0 && (
                     <div className="flex flex-col items-center py-12">
                       <Search size={28} className="text-white mb-2 opacity-20" />
                       <p className="text-[13px] font-semibold text-white mb-1">No results for "{debouncedSearch}"</p>
@@ -1049,7 +1072,7 @@ export default function Markets() {
               <div className="flex items-center justify-between mt-4 px-4 py-3 rounded-2xl"
                 style={{ background:"rgba(13,17,26,0.7)", border:"1px solid rgba(255,255,255,0.06)" }}>
                 <span className="text-[11px]" style={{ color:"#5a6072" }}>
-                  Page {page} of 80 · {filtered.length} coins
+                  Page {page} of 80 · {displayCoins.length} coins
                 </span>
                 <div className="flex items-center gap-2">
                   <button onClick={() => handlePage(Math.max(1,page-1))} disabled={page===1}
@@ -1235,7 +1258,7 @@ export default function Markets() {
                 Refresh in {countdown}s
               </div>
               <div className="ml-auto text-[10px] font-mono" style={{ color:"#5a6072" }}>
-                {filtered.length > 0 && `${filtered.length} coins`}
+                {displayCoins.length > 0 && `${displayCoins.length} coins`}
               </div>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -1299,37 +1322,9 @@ export default function Markets() {
                     </tr>
                   </thead>
                   <tbody>
-                    {effectiveLoading
+                    {displayLoading
                       ? Array.from({length:25}).map((_,i) => <DeskSkelRow key={i} i={i}/>)
-                      : isSearchMode
-                        ? searchFetching
-                          ? Array.from({length:10}).map((_,i) => <DeskSkelRow key={i} i={i}/>)
-                          : liveSearchCoins.map((c,idx) => (
-                              <motion.tr key={c.id}
-                                initial={{ opacity:0 }} animate={{ opacity:1 }}
-                                transition={{ duration:0.1, delay:Math.min(idx*0.007,0.25) }}
-                                style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
-                                onClick={() => setLocation(`/research/${c.symbol.toUpperCase()}`)}
-                                onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background="rgba(41,98,255,0.05)"; }}
-                                onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background="transparent"; }}>
-                                <td className="pl-4 pr-2 py-3.5" />
-                                <td className="px-3 py-3.5 text-[11px] font-mono tabular-nums" style={{ color:"#5a6072" }}>{c.market_cap_rank||"—"}</td>
-                                <td className="px-3 py-3.5">
-                                  <div className="flex items-center gap-2.5">
-                                    <img src={c.thumb} alt={c.name} loading="lazy" className="w-7 h-7 rounded-full shrink-0"
-                                      onError={e => { (e.currentTarget as HTMLImageElement).style.display="none"; }} />
-                                    <div>
-                                      <div className="text-[12px] font-bold text-white">{c.name}</div>
-                                      <div className="text-[9px] font-semibold uppercase mt-0.5" style={{ color:"#5a6072" }}>{c.symbol}</div>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td colSpan={8} className="px-3 py-3.5 text-right text-[11px]" style={{ color:"#4a5068" }}>
-                                  Click to view full chart →
-                                </td>
-                              </motion.tr>
-                            ))
-                        : filtered.map((coin,idx) => {
+                      : displayCoins.map((coin,idx) => {
                             const is7dPos = (coin.price_change_percentage_7d_in_currency ?? 0) >= 0;
                             const supplyPct = coin.max_supply
                               ? Math.min(100,(coin.circulating_supply/coin.max_supply)*100)
@@ -1390,7 +1385,7 @@ export default function Markets() {
                     }
                   </tbody>
                 </table>
-                {!effectiveLoading && isSearchMode && !searchFetching && liveSearchCoins.length===0 && (
+                {!displayLoading && isSearchMode && displayCoins.length===0 && (
                   <div className="flex flex-col items-center justify-center py-12">
                     <Search size={28} className="text-white mb-3 opacity-20" />
                     <p className="text-[13px] font-semibold text-white mb-1">No results for "{debouncedSearch}"</p>
@@ -1401,7 +1396,7 @@ export default function Markets() {
                     </button>
                   </div>
                 )}
-                {!effectiveLoading && !isSearchMode && filtered.length===0 && (
+                {!displayLoading && !isSearchMode && displayCoins.length===0 && (
                   <div className="flex flex-col items-center justify-center py-12">
                     <Search size={28} className="text-white mb-3 opacity-20" />
                     <p className="text-[13px] font-semibold text-white mb-1">No coins found</p>
@@ -1419,12 +1414,12 @@ export default function Markets() {
           {/* Desktop CARDS */}
           {!isError && view==="cards" && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-              {effectiveLoading
+              {displayLoading
                 ? Array.from({length:24}).map((_,i) => (
                     <div key={i} className="rounded-2xl h-44 animate-pulse"
                       style={{ background:"rgba(13,17,26,0.6)", animationDelay:`${i*30}ms` }} />
                   ))
-                : filtered.map((coin,idx) => {
+                : displayCoins.map((coin,idx) => {
                     const is7dPos = (coin.price_change_percentage_7d_in_currency ?? 0) >= 0;
                     const isWatched = watchlist.has(coin.id);
                     return (
@@ -1496,7 +1491,7 @@ export default function Markets() {
               style={{ background:"rgba(13,17,26,0.7)", border:"1px solid rgba(255,255,255,0.05)" }}>
               <p className="text-[11px]" style={{ color:"#5a6072" }}>
                 Page <span className="font-bold text-white">{page}</span> of 80 ·{" "}
-                Showing <span className="font-bold text-white">{filtered.length}</span> coins per page ·{" "}
+                Showing <span className="font-bold text-white">{displayCoins.length}</span> coins per page ·{" "}
                 <span style={{ color:"#4a5068" }}>All 20,000+ CoinGecko coins available</span>
               </p>
               <div className="flex items-center gap-2">

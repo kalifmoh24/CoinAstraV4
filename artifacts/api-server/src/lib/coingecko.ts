@@ -175,7 +175,7 @@ export interface GlobalData {
 }
 
 /** Top coins by market cap, paginated (max 250 per call on free tier) */
-export async function getCoinsMarkets(page = 1, perPage = 100, category?: string): Promise<CoinMarket[]> {
+export async function getCoinsMarkets(page = 1, perPage = 100, category?: string, ids?: string): Promise<CoinMarket[]> {
   const params: Record<string, string> = {
     vs_currency: "usd",
     order: "market_cap_desc",
@@ -185,7 +185,13 @@ export async function getCoinsMarkets(page = 1, perPage = 100, category?: string
     price_change_percentage: "7d,30d",
   };
   if (category) params.category = category;
-  return cgFetch<CoinMarket[]>("/coins/markets", TTL.MARKETS, params);
+  if (ids) params.ids = ids;
+  return cgFetch<CoinMarket[]>("/coins/markets", ids ? TTL.COIN : TTL.MARKETS, params);
+}
+
+/** Full coin list (all 17k+ coins) — id/symbol/name only, for local search index */
+export async function getCoinsList(): Promise<{ id: string; symbol: string; name: string }[]> {
+  return cgFetch<{ id: string; symbol: string; name: string }[]>("/coins/list", 6 * 60 * 60 * 1000);
 }
 
 /** Search coins, exchanges, categories */
