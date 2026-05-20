@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import {
   Search, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown,
   ChevronLeft, ChevronRight, Star, Globe, BarChart2,
@@ -14,6 +14,8 @@ import { MobileNav } from "@/components/mobile-nav";
 import { GlobalTicker } from "@/components/global-ticker";
 import { NotificationCenter } from "@/components/notification-center";
 import { useTheme } from "@/components/theme-provider";
+import { useCoinIndex } from "@/hooks/use-coin-index";
+import { idbSet, idbGet } from "@/lib/idb-cache";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -130,9 +132,18 @@ function fmtSupply(n: number, sym: string): string {
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 async function fetchMarkets(page: number): Promise<CoinMarket[]> {
-  const res = await fetch(`/api/coins/markets?per_page=250&page=${page}&sparkline=true&price_change_percentage=1h,7d`);
-  if (!res.ok) throw new Error(`markets ${res.status}`);
-  return res.json();
+  const key = `coinastra:markets:p${page}`;
+  try {
+    const res = await fetch(`/api/coins/markets?per_page=250&page=${page}&sparkline=true&price_change_percentage=1h,7d`);
+    if (res.ok) {
+      const data = await res.json() as CoinMarket[];
+      idbSet(key, data, 5 * 60 * 1000).catch(() => {});
+      return data;
+    }
+  } catch { /* fall through to cache */ }
+  const cached = await idbGet<CoinMarket[]>(key);
+  if (cached) return cached;
+  throw new Error(`markets p${page} unavailable`);
 }
 async function fetchCategoryCoins(categoryId: string, page: number): Promise<CoinMarket[]> {
   const res = await fetch(`/api/coins/markets?per_page=250&page=${page}&category=${encodeURIComponent(categoryId)}&sparkline=true&price_change_percentage=1h,7d`);
@@ -482,8 +493,8 @@ export default function Markets() {
   const { isMobile, isTablet } = useScreenSize();
   const { theme, setTheme } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const [page, setPage]           = useState(1);
   const [search, setSearch]       = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [category, setCategory]   = useState("All");
@@ -500,14 +511,34 @@ export default function Markets() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // ── Data ─────────────────────────────────────────────────────────────────────
-  const { data:coins, isLoading, isError, error, dataUpdatedAt, refetch } = useQuery({
-    queryKey: ["cg-markets", page],
-    queryFn: () => fetchMarkets(page),
-    refetchInterval: 15_000,
+  // ── Infinite scroll market data ────────────────────────────────────────────
+  const {
+    data: infiniteData,
+    isLoading,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    dataUpdatedAt,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: ["cg-markets-inf"],
+    queryFn: ({ pageParam }) => fetchMarkets(pageParam as number),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length >= 250 ? allPages.length + 1 : undefined,
     staleTime: 25_000,
+    gcTime: 2 * 60 * 60 * 1000,
+    refetchInterval: 30_000,
     retry: 2,
   });
+
+  // Flat list of all accumulated pages
+  const allCoins = useMemo(
+    () => (infiniteData?.pages ?? []).flatMap(p => p),
+    [infiniteData]
+  );
   const { data: globalRaw } = useQuery({
     queryKey: ["cg-global"],
     queryFn: fetchGlobal,
@@ -525,29 +556,41 @@ export default function Markets() {
     isLoading: categoryLoading,
     isError: categoryError,
   } = useQuery({
-    queryKey: ["cg-category-markets", activeCategoryId, page],
-    queryFn: () => fetchCategoryCoins(activeCategoryId!, page),
+    queryKey: ["cg-category-markets", activeCategoryId],
+    queryFn: () => fetchCategoryCoins(activeCategoryId!, 1),
     enabled: isCategoryMode,
     refetchInterval: 30_000,
     staleTime: 25_000,
     retry: 2,
   });
 
-  // ── Live search (fires for any query >= 1 char) ───────────────────────────
-  const isSearchMode = debouncedSearch.length >= 1;
+  // ── Local coin index (17k+ coins, instant zero-network search) ───────────
+  const { instantSearch, total: coinIndexTotal } = useCoinIndex();
+  const isSearchMode = search.length >= 1;
+
+  // Instant local matches — available the moment the user types
+  const localMatches = useMemo(
+    () => (search.length >= 1 ? instantSearch(search) : []),
+    [search, instantSearch]
+  );
+
+  // Debounced CoinGecko ranked search (350ms)
   const { data: liveSearchData, isFetching: searchFetching } = useQuery({
     queryKey: ["cg-search-markets", debouncedSearch],
     queryFn: () => fetchCoinSearchMarkets(debouncedSearch),
-    enabled: isSearchMode,
+    enabled: debouncedSearch.length >= 1,
     staleTime: 30_000,
   });
   const liveSearchCoins = liveSearchData?.coins ?? [];
 
+  // searchIds: prefer CoinGecko ranked results; fall back to local index while CG is loading
+  const searchIds = useMemo(() => {
+    const cgIds  = liveSearchCoins.slice(0, 20).map(c => c.id);
+    const locIds = localMatches.slice(0, 20).map(c => c.id);
+    return (cgIds.length > 0 ? cgIds : locIds).join(",");
+  }, [liveSearchCoins, localMatches]);
+
   // ── Enrich search results with live market data (prices, mcap, volume, sparkline)
-  const searchIds = useMemo(
-    () => liveSearchCoins.slice(0, 20).map(c => c.id).join(","),
-    [liveSearchCoins]
-  );
   const { data: enrichedSearchData, isFetching: enrichFetching } = useQuery({
     queryKey: ["cg-search-enriched", searchIds],
     queryFn: async () => {
@@ -555,28 +598,44 @@ export default function Markets() {
       if (!res.ok) return [] as CoinMarket[];
       return res.json() as Promise<CoinMarket[]>;
     },
-    enabled: isSearchMode && searchIds.length > 0 && !searchFetching,
+    enabled: isSearchMode && searchIds.length > 0,
     staleTime: 30_000,
     retry: 1,
   });
-  // Preserve search order (search rank vs market cap rank)
+  // Preserve search rank order
   const enrichedSearchCoins: CoinMarket[] = useMemo(() => {
     if (!enrichedSearchData || enrichedSearchData.length === 0) return [];
-    const idOrder = liveSearchCoins.map(c => c.id);
+    const idOrder = (liveSearchCoins.length > 0 ? liveSearchCoins : localMatches).map(c => c.id);
     return [...enrichedSearchData].sort((a, b) => {
       const ai = idOrder.indexOf(a.id);
       const bi = idOrder.indexOf(b.id);
       return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
     });
-  }, [enrichedSearchData, liveSearchCoins]);
+  }, [enrichedSearchData, liveSearchCoins, localMatches]);
 
   const searchLoading = searchFetching || (isSearchMode && searchIds.length > 0 && enrichFetching);
+
+  // ── Infinite scroll: load next page when sentinel enters viewport ──────────
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasNextPage && !isFetchingNextPage && !isSearchMode && !isCategoryMode) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "600px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, isSearchMode, isCategoryMode]);
 
   // ── Resolved coin list ─────────────────────────────────────────────────────
   // In search mode: enriched search results (full market data)
   // In category mode: category coins
   // Otherwise: paginated markets
-  const baseCoins: CoinMarket[] = isCategoryMode ? (categoryCoins ?? []) : (coins ?? []);
+  const baseCoins: CoinMarket[] = isCategoryMode ? (categoryCoins ?? []) : allCoins;
 
   // ── Countdown ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -614,11 +673,6 @@ export default function Markets() {
     if (sortKey===k) setSortDir(d => d==="asc"?"desc":"asc");
     else { setSortKey(k); setSortDir(k==="rank"?"asc":"desc"); }
   }, [sortKey]);
-
-  const handlePage = (p: number) => {
-    setPage(p);
-    scrollRef.current?.scrollTo({ top:0, behavior:"smooth" });
-  };
 
   const toggleWatch = (id:string) => setWatchlist(w => {
     const n = new Set(w); n.has(id) ? n.delete(id) : n.add(id); return n;
@@ -697,7 +751,7 @@ export default function Markets() {
         <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling:"touch" }}>
 
           {/* Live ticker */}
-          {!isLoading && <MobileTicker coins={coins ?? []} />}
+          {!isLoading && <MobileTicker coins={allCoins.slice(0, 10)} />}
 
           {/* Global stats */}
           <MobileStatStrip g={g} />
@@ -774,49 +828,20 @@ export default function Markets() {
             </>
           )}
 
-          {/* Mobile Pagination */}
-          {!isError && !effectiveLoading && !isSearchMode && filtered.length > 0 && !isCategoryMode && (
-            <div className="px-4 py-4 mx-4 my-4 rounded-2xl"
-              style={{ background:"rgba(13,17,26,0.8)", border:"1px solid rgba(255,255,255,0.06)" }}>
-              <div className="text-center text-[9px] mb-2 font-mono" style={{ color:"#3a4058" }}>
-                Page {page} of 80 · 20,000+ coins total
-              </div>
-              <div className="flex items-center justify-between">
-                <button onClick={() => handlePage(Math.max(1,page-1))} disabled={page===1}
-                  className="flex items-center gap-1.5 px-4 h-10 rounded-xl text-[12px] font-bold disabled:opacity-30 transition-all"
-                  style={{ background:"rgba(42,46,57,0.8)", border:"1px solid rgba(255,255,255,0.08)", color:"#a0a8bc" }}>
-                  <ChevronLeft size={16}/> Prev
-                </button>
-                <div className="flex items-center gap-1">
-                  {(() => {
-                    const maxPage = 80;
-                    const pages: number[] = [];
-                    if (page > 2) pages.push(1);
-                    for (let p = Math.max(1, page-1); p <= Math.min(maxPage, page+1); p++) pages.push(p);
-                    if (page < maxPage-1) pages.push(maxPage);
-                    return pages.filter((p,i,a) => a.indexOf(p)===i).map((p,i,a) => (
-                      <React.Fragment key={p}>
-                        {i>0 && a[i-1]!==p-1 && <span className="text-[#3a4058] text-[10px] px-0.5">…</span>}
-                        <button onClick={() => handlePage(p)}
-                          className="w-9 h-9 rounded-xl text-[11px] font-bold transition-all"
-                          style={{
-                            background: page===p ? "rgba(41,98,255,0.25)" : "rgba(42,46,57,0.6)",
-                            color: page===p ? "#4d7fff" : "#5a6072",
-                            border: page===p ? "1px solid rgba(41,98,255,0.45)" : "1px solid rgba(255,255,255,0.07)",
-                            boxShadow: page===p ? "0 0 16px rgba(41,98,255,0.3)" : "none",
-                          }}>
-                          {p}
-                        </button>
-                      </React.Fragment>
-                    ));
-                  })()}
+          {/* Infinite scroll sentinel — mobile */}
+          {!isSearchMode && !isCategoryMode && (
+            <div ref={loadMoreRef} className="py-4 flex flex-col items-center gap-2">
+              {isFetchingNextPage && (
+                <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color:"#4a5068" }}>
+                  <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor:"#2962ff", borderTopColor:"transparent" }} />
+                  Loading more coins…
                 </div>
-                <button onClick={() => handlePage(Math.min(80, page+1))} disabled={page===80}
-                  className="flex items-center gap-1.5 px-4 h-10 rounded-xl text-[12px] font-bold disabled:opacity-30 transition-all"
-                  style={{ background:"rgba(41,98,255,0.18)", border:"1px solid rgba(41,98,255,0.35)", color:"#4d7fff" }}>
-                  Next <ChevronRight size={16}/>
-                </button>
-              </div>
+              )}
+              {!hasNextPage && allCoins.length > 0 && (
+                <p className="text-[10px] font-mono text-center" style={{ color:"#3a4058" }}>
+                  All {allCoins.length.toLocaleString()} coins loaded
+                </p>
+              )}
             </div>
           )}
 
@@ -945,7 +970,7 @@ export default function Markets() {
                 {CATEGORY_LABELS.map(cat => {
                   const active = category === cat;
                   return (
-                    <button key={cat} onClick={() => { setCategory(cat); setPage(1); }}
+                    <button key={cat} onClick={() => setCategory(cat)}
                       className="px-3 h-8 rounded-full text-[10px] font-semibold transition-all"
                       style={{ background: active?"rgba(41,98,255,0.22)":"rgba(42,46,57,0.6)",
                         color: active?"#4d7fff":"#5a6072",
@@ -1033,7 +1058,7 @@ export default function Markets() {
                                     {fmtLarge(coin.total_volume)}
                                   </td>
                                   <td className="px-3 py-3 text-right">
-                                    <MiniSparkline prices={coin.sparkline_in_7d?.price??[]} isPos={is7dPos} id={`t_${coin.id}_${page}`} />
+                                    <MiniSparkline prices={coin.sparkline_in_7d?.price??[]} isPos={is7dPos} id={`t_${coin.id}`} />
                                   </td>
                                 </motion.tr>
                               );
@@ -1067,44 +1092,20 @@ export default function Markets() {
               </div>
             )}
 
-            {/* Tablet Pagination */}
-            {!isError && !effectiveLoading && !isSearchMode && filtered.length > 0 && !isCategoryMode && (
-              <div className="flex items-center justify-between mt-4 px-4 py-3 rounded-2xl"
-                style={{ background:"rgba(13,17,26,0.7)", border:"1px solid rgba(255,255,255,0.06)" }}>
-                <span className="text-[11px]" style={{ color:"#5a6072" }}>
-                  Page {page} of 80 · {displayCoins.length} coins
-                </span>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => handlePage(Math.max(1,page-1))} disabled={page===1}
-                    className="flex items-center gap-1 px-3 h-8 rounded-xl text-[11px] font-semibold disabled:opacity-30 transition-all"
-                    style={{ background:"rgba(42,46,57,0.8)", border:"1px solid rgba(255,255,255,0.08)", color:"#a0a8bc" }}>
-                    <ChevronLeft size={14}/> Prev
-                  </button>
-                  {(() => {
-                    const maxPage = 80;
-                    const pages: number[] = [];
-                    if (page > 2) pages.push(1);
-                    for (let p = Math.max(1, page-1); p <= Math.min(maxPage, page+1); p++) pages.push(p);
-                    if (page < maxPage-1) pages.push(maxPage);
-                    return pages.filter((p,i,a) => a.indexOf(p)===i).map((p,i,a) => (
-                      <React.Fragment key={p}>
-                        {i>0 && a[i-1]!==p-1 && <span className="text-[#3a4058] text-xs">…</span>}
-                        <button onClick={() => handlePage(p)}
-                          className="w-8 h-8 rounded-xl text-[11px] font-bold transition-all"
-                          style={{ background:page===p?"rgba(41,98,255,0.25)":"rgba(42,46,57,0.6)",
-                            color:page===p?"#4d7fff":"#5a6072",
-                            border:page===p?"1px solid rgba(41,98,255,0.45)":"1px solid rgba(255,255,255,0.06)" }}>
-                          {p}
-                        </button>
-                      </React.Fragment>
-                    ));
-                  })()}
-                  <button onClick={() => handlePage(Math.min(80, page+1))} disabled={page===80}
-                    className="flex items-center gap-1 px-3 h-8 rounded-xl text-[11px] font-semibold disabled:opacity-30 transition-all"
-                    style={{ background:"rgba(41,98,255,0.18)", border:"1px solid rgba(41,98,255,0.35)", color:"#4d7fff" }}>
-                    Next <ChevronRight size={14}/>
-                  </button>
-                </div>
+            {/* Infinite scroll sentinel — tablet */}
+            {!isSearchMode && !isCategoryMode && (
+              <div ref={loadMoreRef} className="mt-4 py-3 flex flex-col items-center gap-2">
+                {isFetchingNextPage && (
+                  <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color:"#4a5068" }}>
+                    <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor:"#2962ff", borderTopColor:"transparent" }} />
+                    Loading more coins…
+                  </div>
+                )}
+                {!hasNextPage && allCoins.length > 0 && (
+                  <p className="text-[10px] font-mono" style={{ color:"#3a4058" }}>
+                    All {allCoins.length.toLocaleString()} coins loaded · 20,000+ coverage
+                  </p>
+                )}
               </div>
             )}
             <div className="h-6" />
@@ -1265,7 +1266,7 @@ export default function Markets() {
               {CATEGORY_LABELS.map(cat => {
                 const active = category===cat;
                 return (
-                  <button key={cat} onClick={() => { setCategory(cat); setPage(1); }}
+                  <button key={cat} onClick={() => setCategory(cat)}
                     className="px-3 h-7 rounded-full text-[10px] font-semibold transition-all"
                     style={{ background:active?"rgba(41,98,255,0.22)":"rgba(42,46,57,0.6)",
                       color:active?"#4d7fff":"#5a6072",
@@ -1377,7 +1378,7 @@ export default function Markets() {
                                   </div>
                                 </td>
                                 <td className="px-3 py-3.5 text-right">
-                                  <MiniSparkline prices={coin.sparkline_in_7d?.price??[]} isPos={is7dPos} id={`d_${coin.id}_${page}`} />
+                                  <MiniSparkline prices={coin.sparkline_in_7d?.price??[]} isPos={is7dPos} id={`d_${coin.id}`} />
                                 </td>
                               </motion.tr>
                             );
@@ -1457,7 +1458,7 @@ export default function Markets() {
                           </div>
                         </div>
                         <div className="my-2">
-                          <MiniSparkline prices={coin.sparkline_in_7d?.price??[]} isPos={is7dPos} id={`card_${coin.id}_${page}`} w={80} h={32} />
+                          <MiniSparkline prices={coin.sparkline_in_7d?.price??[]} isPos={is7dPos} id={`card_${coin.id}`} w={80} h={32} />
                         </div>
                         <div className="text-[14px] font-black text-white font-mono tabular-nums tracking-tight">{fmtPrice(coin.current_price)}</div>
                         <div className="flex items-center gap-2 mt-1.5">
@@ -1484,50 +1485,21 @@ export default function Markets() {
             </div>
           )}
 
-          {/* Desktop Pagination */}
-          {!isError && !effectiveLoading && !isSearchMode && filtered.length > 0 && !isCategoryMode && (
-            <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.4 }}
-              className="flex flex-col sm:flex-row items-center justify-between mt-5 gap-3 px-4 py-3 rounded-2xl"
-              style={{ background:"rgba(13,17,26,0.7)", border:"1px solid rgba(255,255,255,0.05)" }}>
-              <p className="text-[11px]" style={{ color:"#5a6072" }}>
-                Page <span className="font-bold text-white">{page}</span> of 80 ·{" "}
-                Showing <span className="font-bold text-white">{displayCoins.length}</span> coins per page ·{" "}
-                <span style={{ color:"#4a5068" }}>All 20,000+ CoinGecko coins available</span>
-              </p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => handlePage(Math.max(1,page-1))} disabled={page===1}
-                  className="flex items-center gap-1.5 px-3 h-9 rounded-xl text-[11px] font-semibold transition-all disabled:opacity-25"
-                  style={{ background:"rgba(42,46,57,0.8)", border:"1px solid rgba(255,255,255,0.07)", color:"#a0a8bc" }}>
-                  <ChevronLeft size={16}/> Prev
-                </button>
-                {(() => {
-                  const maxPage = 80;
-                  const pages: number[] = [];
-                  if (page > 3) pages.push(1);
-                  for (let p = Math.max(1, page-2); p <= Math.min(maxPage, page+2); p++) pages.push(p);
-                  if (page < maxPage-2) pages.push(maxPage);
-                  return pages.filter((p,i,a) => a.indexOf(p)===i).map((p,i,a) => (
-                    <React.Fragment key={p}>
-                      {i>0 && a[i-1]!==p-1 && <span className="text-[#3a4058] text-xs">…</span>}
-                      <button onClick={() => handlePage(p)}
-                        className="w-9 h-9 rounded-xl text-[11px] font-bold transition-all"
-                        style={{ background:page===p?"rgba(41,98,255,0.25)":"rgba(42,46,57,0.6)",
-                          color:page===p?"#4d7fff":"#5a6072",
-                          border:page===p?"1px solid rgba(41,98,255,0.45)":"1px solid rgba(255,255,255,0.06)",
-                          boxShadow:page===p?"0 0 16px rgba(41,98,255,0.25)":"none" }}>
-                        {p}
-                      </button>
-                    </React.Fragment>
-                  ));
-                })()}
-                <button onClick={() => handlePage(Math.min(80, page+1))} disabled={page===80}
-                  className="flex items-center gap-1.5 px-3 h-9 rounded-xl text-[11px] font-semibold transition-all disabled:opacity-25"
-                  style={{ background:"rgba(41,98,255,0.18)", border:"1px solid rgba(41,98,255,0.35)", color:"#4d7fff",
-                    boxShadow:"0 0 14px rgba(41,98,255,0.15)" }}>
-                  Next <ChevronRight size={16}/>
-                </button>
-              </div>
-            </motion.div>
+          {/* Infinite scroll sentinel — desktop */}
+          {!isSearchMode && !isCategoryMode && (
+            <div ref={loadMoreRef} className="mt-5 py-3 flex flex-col items-center gap-2">
+              {isFetchingNextPage && (
+                <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color:"#4a5068" }}>
+                  <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor:"#2962ff", borderTopColor:"transparent" }} />
+                  Loading more coins…
+                </div>
+              )}
+              {!hasNextPage && allCoins.length > 0 && (
+                <p className="text-[10px] font-mono" style={{ color:"#3a4058" }}>
+                  All {allCoins.length.toLocaleString()} coins loaded · CoinGecko coverage complete
+                </p>
+              )}
+            </div>
           )}
 
           <div className="mt-4 text-center">
