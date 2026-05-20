@@ -728,33 +728,48 @@ export default function Markets() {
           )}
 
           {/* Mobile Pagination */}
-          {!isError && !isLoading && filtered.length > 0 && (
-            <div className="flex items-center justify-between px-4 py-4 mx-4 my-4 rounded-2xl"
+          {!isError && !effectiveLoading && !isSearchMode && filtered.length > 0 && !isCategoryMode && (
+            <div className="px-4 py-4 mx-4 my-4 rounded-2xl"
               style={{ background:"rgba(13,17,26,0.8)", border:"1px solid rgba(255,255,255,0.06)" }}>
-              <button onClick={() => handlePage(Math.max(1,page-1))} disabled={page===1}
-                className="flex items-center gap-1.5 px-4 h-10 rounded-xl text-[12px] font-bold disabled:opacity-30 transition-all"
-                style={{ background:"rgba(42,46,57,0.8)", border:"1px solid rgba(255,255,255,0.08)", color:"#a0a8bc" }}>
-                <ChevronLeft size={16}/> Prev
-              </button>
-              <div className="flex items-center gap-1.5">
-                {[1,2,3,4,5].map(p => (
-                  <button key={p} onClick={() => handlePage(p)}
-                    className="w-9 h-9 rounded-xl text-[12px] font-bold transition-all"
-                    style={{
-                      background: page===p ? "rgba(41,98,255,0.25)" : "rgba(42,46,57,0.6)",
-                      color: page===p ? "#4d7fff" : "#5a6072",
-                      border: page===p ? "1px solid rgba(41,98,255,0.45)" : "1px solid rgba(255,255,255,0.07)",
-                      boxShadow: page===p ? "0 0 16px rgba(41,98,255,0.3)" : "none",
-                    }}>
-                    {p}
-                  </button>
-                ))}
+              <div className="text-center text-[9px] mb-2 font-mono" style={{ color:"#3a4058" }}>
+                Page {page} of 80 · 20,000+ coins total
               </div>
-              <button onClick={() => handlePage(page+1)}
-                className="flex items-center gap-1.5 px-4 h-10 rounded-xl text-[12px] font-bold transition-all"
-                style={{ background:"rgba(41,98,255,0.18)", border:"1px solid rgba(41,98,255,0.35)", color:"#4d7fff" }}>
-                Next <ChevronRight size={16}/>
-              </button>
+              <div className="flex items-center justify-between">
+                <button onClick={() => handlePage(Math.max(1,page-1))} disabled={page===1}
+                  className="flex items-center gap-1.5 px-4 h-10 rounded-xl text-[12px] font-bold disabled:opacity-30 transition-all"
+                  style={{ background:"rgba(42,46,57,0.8)", border:"1px solid rgba(255,255,255,0.08)", color:"#a0a8bc" }}>
+                  <ChevronLeft size={16}/> Prev
+                </button>
+                <div className="flex items-center gap-1">
+                  {(() => {
+                    const maxPage = 80;
+                    const pages: number[] = [];
+                    if (page > 2) pages.push(1);
+                    for (let p = Math.max(1, page-1); p <= Math.min(maxPage, page+1); p++) pages.push(p);
+                    if (page < maxPage-1) pages.push(maxPage);
+                    return pages.filter((p,i,a) => a.indexOf(p)===i).map((p,i,a) => (
+                      <React.Fragment key={p}>
+                        {i>0 && a[i-1]!==p-1 && <span className="text-[#3a4058] text-[10px] px-0.5">…</span>}
+                        <button onClick={() => handlePage(p)}
+                          className="w-9 h-9 rounded-xl text-[11px] font-bold transition-all"
+                          style={{
+                            background: page===p ? "rgba(41,98,255,0.25)" : "rgba(42,46,57,0.6)",
+                            color: page===p ? "#4d7fff" : "#5a6072",
+                            border: page===p ? "1px solid rgba(41,98,255,0.45)" : "1px solid rgba(255,255,255,0.07)",
+                            boxShadow: page===p ? "0 0 16px rgba(41,98,255,0.3)" : "none",
+                          }}>
+                          {p}
+                        </button>
+                      </React.Fragment>
+                    ));
+                  })()}
+                </div>
+                <button onClick={() => handlePage(Math.min(80, page+1))} disabled={page===80}
+                  className="flex items-center gap-1.5 px-4 h-10 rounded-xl text-[12px] font-bold disabled:opacity-30 transition-all"
+                  style={{ background:"rgba(41,98,255,0.18)", border:"1px solid rgba(41,98,255,0.35)", color:"#4d7fff" }}>
+                  Next <ChevronRight size={16}/>
+                </button>
+              </div>
             </div>
           )}
 
@@ -1030,11 +1045,11 @@ export default function Markets() {
             )}
 
             {/* Tablet Pagination */}
-            {!isError && !isLoading && filtered.length > 0 && (
+            {!isError && !effectiveLoading && !isSearchMode && filtered.length > 0 && !isCategoryMode && (
               <div className="flex items-center justify-between mt-4 px-4 py-3 rounded-2xl"
                 style={{ background:"rgba(13,17,26,0.7)", border:"1px solid rgba(255,255,255,0.06)" }}>
                 <span className="text-[11px]" style={{ color:"#5a6072" }}>
-                  {filtered.length} coins · Page {page}
+                  Page {page} of 80 · {filtered.length} coins
                 </span>
                 <div className="flex items-center gap-2">
                   <button onClick={() => handlePage(Math.max(1,page-1))} disabled={page===1}
@@ -1042,17 +1057,27 @@ export default function Markets() {
                     style={{ background:"rgba(42,46,57,0.8)", border:"1px solid rgba(255,255,255,0.08)", color:"#a0a8bc" }}>
                     <ChevronLeft size={14}/> Prev
                   </button>
-                  {[1,2,3,4,5].map(p => (
-                    <button key={p} onClick={() => handlePage(p)}
-                      className="w-8 h-8 rounded-xl text-[11px] font-bold transition-all"
-                      style={{ background:page===p?"rgba(41,98,255,0.25)":"rgba(42,46,57,0.6)",
-                        color:page===p?"#4d7fff":"#5a6072",
-                        border:page===p?"1px solid rgba(41,98,255,0.45)":"1px solid rgba(255,255,255,0.06)" }}>
-                      {p}
-                    </button>
-                  ))}
-                  <button onClick={() => handlePage(page+1)}
-                    className="flex items-center gap-1 px-3 h-8 rounded-xl text-[11px] font-semibold transition-all"
+                  {(() => {
+                    const maxPage = 80;
+                    const pages: number[] = [];
+                    if (page > 2) pages.push(1);
+                    for (let p = Math.max(1, page-1); p <= Math.min(maxPage, page+1); p++) pages.push(p);
+                    if (page < maxPage-1) pages.push(maxPage);
+                    return pages.filter((p,i,a) => a.indexOf(p)===i).map((p,i,a) => (
+                      <React.Fragment key={p}>
+                        {i>0 && a[i-1]!==p-1 && <span className="text-[#3a4058] text-xs">…</span>}
+                        <button onClick={() => handlePage(p)}
+                          className="w-8 h-8 rounded-xl text-[11px] font-bold transition-all"
+                          style={{ background:page===p?"rgba(41,98,255,0.25)":"rgba(42,46,57,0.6)",
+                            color:page===p?"#4d7fff":"#5a6072",
+                            border:page===p?"1px solid rgba(41,98,255,0.45)":"1px solid rgba(255,255,255,0.06)" }}>
+                          {p}
+                        </button>
+                      </React.Fragment>
+                    ));
+                  })()}
+                  <button onClick={() => handlePage(Math.min(80, page+1))} disabled={page===80}
+                    className="flex items-center gap-1 px-3 h-8 rounded-xl text-[11px] font-semibold disabled:opacity-30 transition-all"
                     style={{ background:"rgba(41,98,255,0.18)", border:"1px solid rgba(41,98,255,0.35)", color:"#4d7fff" }}>
                     Next <ChevronRight size={14}/>
                   </button>
@@ -1470,9 +1495,9 @@ export default function Markets() {
               className="flex flex-col sm:flex-row items-center justify-between mt-5 gap-3 px-4 py-3 rounded-2xl"
               style={{ background:"rgba(13,17,26,0.7)", border:"1px solid rgba(255,255,255,0.05)" }}>
               <p className="text-[11px]" style={{ color:"#5a6072" }}>
-                Page <span className="font-bold text-white">{page}</span> of 40 ·{" "}
-                Showing <span className="font-bold text-white">{filtered.length}</span> coins ·{" "}
-                <span style={{ color:"#4a5068" }}>Up to 10,000 coins across all pages</span>
+                Page <span className="font-bold text-white">{page}</span> of 80 ·{" "}
+                Showing <span className="font-bold text-white">{filtered.length}</span> coins per page ·{" "}
+                <span style={{ color:"#4a5068" }}>All 20,000+ CoinGecko coins available</span>
               </p>
               <div className="flex items-center gap-2">
                 <button onClick={() => handlePage(Math.max(1,page-1))} disabled={page===1}
@@ -1481,7 +1506,7 @@ export default function Markets() {
                   <ChevronLeft size={16}/> Prev
                 </button>
                 {(() => {
-                  const maxPage = 40;
+                  const maxPage = 80;
                   const pages: number[] = [];
                   if (page > 3) pages.push(1);
                   for (let p = Math.max(1, page-2); p <= Math.min(maxPage, page+2); p++) pages.push(p);
@@ -1500,7 +1525,7 @@ export default function Markets() {
                     </React.Fragment>
                   ));
                 })()}
-                <button onClick={() => handlePage(Math.min(40, page+1))} disabled={page===40}
+                <button onClick={() => handlePage(Math.min(80, page+1))} disabled={page===80}
                   className="flex items-center gap-1.5 px-3 h-9 rounded-xl text-[11px] font-semibold transition-all disabled:opacity-25"
                   style={{ background:"rgba(41,98,255,0.18)", border:"1px solid rgba(41,98,255,0.35)", color:"#4d7fff",
                     boxShadow:"0 0 14px rgba(41,98,255,0.15)" }}>
