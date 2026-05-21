@@ -6,7 +6,7 @@ import {
   TrendingUp, Sun, Moon, ChevronLeft, ChevronRight, Globe,
   Brain, Waves, Network, ScanLine, Newspaper, Star, Bell, LayoutGrid,
   GraduationCap, Settings2, User, Sparkles, Zap, Search, X,
-  Layers, Coins, Calendar, Building2, Gamepad2, Shield, BarChart, TrendingDown,
+  Layers, Coins, Calendar, Building2, Gamepad2, Shield, BarChart, TrendingDown, Unlock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MobileNav } from "@/components/mobile-nav";
@@ -46,6 +46,7 @@ const NAV_SECTIONS = [
       { path: "/narratives", label: "Narratives",  icon: Sparkles,   color: "#7c3aed" },
       { path: "/news",       label: "News",        icon: Newspaper,  color: "#0ea5e9" },
       { path: "/heatmap",    label: "Heatmap",     icon: LayoutGrid, color: "#2962ff" },
+      { path: "/unlocks",    label: "Unlocks",     icon: Unlock,     color: "#7c3aed" },
     ],
   },
   {
@@ -81,6 +82,7 @@ const PAGE_SUGGESTIONS = [
   { label: "Signals", sub: "AI trading signals", path: "/signals" },
   { label: "Screener", sub: "AI screener", path: "/screener" },
   { label: "Discover", sub: "Browse all coins", path: "/discover" },
+  { label: "Unlocks", sub: "Token vesting intelligence", path: "/unlocks" },
 ];
 
 function fmtL(n: number) {

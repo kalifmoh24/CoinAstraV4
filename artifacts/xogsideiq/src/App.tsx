@@ -27,6 +27,8 @@ import Settings from "@/pages/Settings";
 import Profile from "@/pages/Profile";
 import TokenDetail from "@/pages/TokenDetail";
 import Discover from "@/pages/Discover";
+import Unlocks from "@/pages/Unlocks";
+import UnlockDetail from "@/pages/UnlockDetail";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +58,8 @@ function Router() {
             <Route path="/watchlist" component={Watchlist} />
             <Route path="/alerts" component={Alerts} />
             <Route path="/heatmap" component={Heatmap} />
+            <Route path="/unlocks" component={Unlocks} />
+            <Route path="/unlocks/:symbol" component={UnlockDetail} />
             <Route path="/learn" component={Learn} />
             <Route path="/settings" component={Settings} />
             <Route path="/profile" component={Profile} />
