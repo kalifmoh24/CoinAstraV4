@@ -2,7 +2,7 @@
   "name": "@workspace/api-server",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@11.1.2",
+  "packageManager": "pnpm@10.0.0",
   "type": "module",
   "scripts": {
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
