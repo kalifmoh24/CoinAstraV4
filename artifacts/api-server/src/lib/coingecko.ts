@@ -72,7 +72,9 @@ async function altFetch<T>(path: string, ttlMs: number): Promise<T> {
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 const TTL = {
-  MARKETS: 30_000,       // 30s — live prices
+  MARKETS: 30_000,       // 30s — live prices (pages 1-5)
+  MARKETS_MID: 5 * 60_000,   // 5min — pages 6-20
+  MARKETS_DEEP: 15 * 60_000, // 15min — pages 21+ (rank rarely changes)
   TRENDING: 300_000,     // 5min
   SEARCH: 300_000,       // 5min
   COIN: 60_000,          // 60s
@@ -186,7 +188,17 @@ export async function getCoinsMarkets(page = 1, perPage = 100, category?: string
   };
   if (category) params.category = category;
   if (ids) params.ids = ids;
-  return cgFetch<CoinMarket[]>("/coins/markets", ids ? TTL.COIN : TTL.MARKETS, params);
+  // Tiered TTL: hot pages cached 30s, mid 5min, deep pages 15min
+  const ttl = ids
+    ? TTL.COIN
+    : category
+      ? TTL.MARKETS
+      : page <= 5
+        ? TTL.MARKETS
+        : page <= 20
+          ? TTL.MARKETS_MID
+          : TTL.MARKETS_DEEP;
+  return cgFetch<CoinMarket[]>("/coins/markets", ttl, params);
 }
 
 /** Full coin list (all 17k+ coins) — id/symbol/name only, for local search index */

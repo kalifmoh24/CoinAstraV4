@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
-import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Search, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown,
   ChevronLeft, ChevronRight, Star, Globe, BarChart2,
@@ -15,7 +15,8 @@ import { GlobalTicker } from "@/components/global-ticker";
 import { NotificationCenter } from "@/components/notification-center";
 import { useTheme } from "@/components/theme-provider";
 import { useCoinIndex } from "@/hooks/use-coin-index";
-import { idbSet, idbGet } from "@/lib/idb-cache";
+import { useAllCoins } from "@/hooks/use-all-coins";
+import { forceRefreshHot } from "@/lib/bg-sync";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -131,20 +132,6 @@ function fmtSupply(n: number, sym: string): string {
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
-async function fetchMarkets(page: number): Promise<CoinMarket[]> {
-  const key = `coinastra:markets:p${page}`;
-  try {
-    const res = await fetch(`/api/coins/markets?per_page=250&page=${page}&sparkline=true&price_change_percentage=1h,7d`);
-    if (res.ok) {
-      const data = await res.json() as CoinMarket[];
-      idbSet(key, data, 5 * 60 * 1000).catch(() => {});
-      return data;
-    }
-  } catch { /* fall through to cache */ }
-  const cached = await idbGet<CoinMarket[]>(key);
-  if (cached) return cached;
-  throw new Error(`markets p${page} unavailable`);
-}
 async function fetchCategoryCoins(categoryId: string, page: number): Promise<CoinMarket[]> {
   const res = await fetch(`/api/coins/markets?per_page=250&page=${page}&category=${encodeURIComponent(categoryId)}&sparkline=true&price_change_percentage=1h,7d`);
   if (!res.ok) throw new Error(`category ${res.status}`);
@@ -504,6 +491,7 @@ export default function Markets() {
   const [watchlist, setWatchlist] = useState<Set<string>>(new Set());
   const [countdown, setCountdown] = useState(30);
   const [showSearch, setShowSearch] = useState(false);
+  const [displayCount, setDisplayCount] = useState(250);
 
   // Debounce search for live CoinGecko search
   useEffect(() => {
@@ -511,34 +499,14 @@ export default function Markets() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // ── Infinite scroll market data ────────────────────────────────────────────
-  const {
-    data: infiniteData,
-    isLoading,
-    isError,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    dataUpdatedAt,
-    refetch,
-  } = useInfiniteQuery({
-    queryKey: ["cg-markets-inf"],
-    queryFn: ({ pageParam }) => fetchMarkets(pageParam as number),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length >= 250 ? allPages.length + 1 : undefined,
-    staleTime: 25_000,
-    gcTime: 2 * 60 * 60 * 1000,
-    refetchInterval: 30_000,
-    retry: 2,
-  });
+  // Reset display window when filter/sort changes
+  useEffect(() => { setDisplayCount(250); }, [category, sortKey, sortDir]);
 
-  // Flat list of all accumulated pages
-  const allCoins = useMemo(
-    () => (infiniteData?.pages ?? []).flatMap(p => p),
-    [infiniteData]
-  );
+  // ── Background sync engine — all 17k+ coins stored locally ────────────────
+  const { coins: allCoins, progress: syncProgress, ready: coinsReady, lastRefreshedAt } = useAllCoins();
+  const isError       = false;
+  const refetch       = useCallback(() => { forceRefreshHot(); }, []);
+  const dataUpdatedAt = lastRefreshedAt;
   const { data: globalRaw } = useQuery({
     queryKey: ["cg-global"],
     queryFn: fetchGlobal,
@@ -550,6 +518,7 @@ export default function Markets() {
   // ── Category-based data ────────────────────────────────────────────────────
   const activeCategoryId = CATEGORY_MAP[category] ?? null;
   const isCategoryMode = activeCategoryId !== null;
+  const isLoading = !coinsReady && !isCategoryMode;
 
   const {
     data: categoryCoins,
@@ -615,32 +584,13 @@ export default function Markets() {
 
   const searchLoading = searchFetching || (isSearchMode && searchIds.length > 0 && enrichFetching);
 
-  // ── Infinite scroll: load next page when sentinel enters viewport ──────────
-  useEffect(() => {
-    const el = loadMoreRef.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && hasNextPage && !isFetchingNextPage && !isSearchMode && !isCategoryMode) {
-          fetchNextPage();
-        }
-      },
-      { rootMargin: "600px" }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, isSearchMode, isCategoryMode]);
-
   // ── Resolved coin list ─────────────────────────────────────────────────────
-  // In search mode: enriched search results (full market data)
-  // In category mode: category coins
-  // Otherwise: paginated markets
   const baseCoins: CoinMarket[] = isCategoryMode ? (categoryCoins ?? []) : allCoins;
 
   // ── Countdown ────────────────────────────────────────────────────────────────
   useEffect(() => {
     setCountdown(30);
-    const t = setInterval(() => setCountdown(c => { if (c <= 1) { refetch(); return 30; } return c-1; }), 1000);
+    const t = setInterval(() => setCountdown(c => c <= 1 ? 30 : c - 1), 1000);
     return () => clearInterval(t);
   }, [dataUpdatedAt]);
 
@@ -665,9 +615,32 @@ export default function Markets() {
 
   // ── Unified display list — what all three views render ────────────────────
   // Search mode: enriched results (full price data for matched coins)
-  // Category/page mode: filtered paginated coins
-  const displayCoins: CoinMarket[] = isSearchMode ? enrichedSearchCoins : filtered;
+  // Category mode: category coins (all)
+  // Normal mode: local coin store sliced by displayCount (infinite scroll expands)
+  const displayCoins: CoinMarket[] = isSearchMode
+    ? enrichedSearchCoins
+    : isCategoryMode
+      ? filtered
+      : filtered.slice(0, displayCount);
   const displayLoading: boolean    = isSearchMode ? searchLoading : effectiveLoading;
+  const hasMoreLocal = !isSearchMode && !isCategoryMode && displayCount < filtered.length;
+  const isSyncingMore = !isSearchMode && !isCategoryMode && syncProgress.pagesLoaded < syncProgress.totalPages;
+
+  // ── Infinite scroll: show more local coins when sentinel enters viewport ────
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isSearchMode && !isCategoryMode && displayCount < filtered.length) {
+          setDisplayCount(c => c + 250);
+        }
+      },
+      { rootMargin: "600px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [isSearchMode, isCategoryMode, displayCount, filtered.length]);
 
   const handleSort = useCallback((k: SortKey) => {
     if (sortKey===k) setSortDir(d => d==="asc"?"desc":"asc");
@@ -781,7 +754,7 @@ export default function Markets() {
               </div>
               <p className="text-white font-bold text-base mb-1">Market data unavailable</p>
               <p className="text-[12px] mb-4" style={{ color:"#5a6072" }}>
-                {(error as Error)?.message ?? "CoinGecko API rate-limited"} · Retrying in {countdown}s
+                CoinGecko API rate-limited · Retrying in {countdown}s
               </p>
               <button onClick={() => refetch()}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold"
@@ -831,15 +804,20 @@ export default function Markets() {
           {/* Infinite scroll sentinel — mobile */}
           {!isSearchMode && !isCategoryMode && (
             <div ref={loadMoreRef} className="py-4 flex flex-col items-center gap-2">
-              {isFetchingNextPage && (
+              {hasMoreLocal && (
                 <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color:"#4a5068" }}>
                   <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor:"#2962ff", borderTopColor:"transparent" }} />
-                  Loading more coins…
+                  Loading more…
                 </div>
               )}
-              {!hasNextPage && allCoins.length > 0 && (
+              {isSyncingMore && !hasMoreLocal && (
                 <p className="text-[10px] font-mono text-center" style={{ color:"#3a4058" }}>
-                  All {allCoins.length.toLocaleString()} coins loaded
+                  Syncing {syncProgress.pagesLoaded * 250}/{syncProgress.totalPages * 250} coins…
+                </p>
+              )}
+              {!isSyncingMore && !hasMoreLocal && allCoins.length > 0 && (
+                <p className="text-[10px] font-mono text-center" style={{ color:"#3a4058" }}>
+                  All {allCoins.length.toLocaleString()} coins stored
                 </p>
               )}
             </div>
@@ -1095,15 +1073,20 @@ export default function Markets() {
             {/* Infinite scroll sentinel — tablet */}
             {!isSearchMode && !isCategoryMode && (
               <div ref={loadMoreRef} className="mt-4 py-3 flex flex-col items-center gap-2">
-                {isFetchingNextPage && (
+                {hasMoreLocal && (
                   <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color:"#4a5068" }}>
                     <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor:"#2962ff", borderTopColor:"transparent" }} />
-                    Loading more coins…
+                    Loading more…
                   </div>
                 )}
-                {!hasNextPage && allCoins.length > 0 && (
+                {isSyncingMore && !hasMoreLocal && (
                   <p className="text-[10px] font-mono" style={{ color:"#3a4058" }}>
-                    All {allCoins.length.toLocaleString()} coins loaded · 20,000+ coverage
+                    Syncing {syncProgress.pagesLoaded * 250}/{syncProgress.totalPages * 250} coins…
+                  </p>
+                )}
+                {!isSyncingMore && !hasMoreLocal && allCoins.length > 0 && (
+                  <p className="text-[10px] font-mono" style={{ color:"#3a4058" }}>
+                    All {allCoins.length.toLocaleString()} coins stored · 17,500+ coverage
                   </p>
                 )}
               </div>
@@ -1289,7 +1272,7 @@ export default function Markets() {
                 <AlertCircle size={28} className="text-[#ef5350]" />
               </div>
               <p className="text-white font-bold text-base mb-1">Market data unavailable</p>
-              <p className="text-[12px] mb-1" style={{ color:"#787b86" }}>{(error as Error)?.message ?? "CoinGecko API rate-limited."}</p>
+              <p className="text-[12px] mb-1" style={{ color:"#787b86" }}>CoinGecko API rate-limited. Cached data showing.</p>
               <p className="text-[11px] mb-5" style={{ color:"#5a6072" }}>Auto-retrying in {countdown}s</p>
               <button onClick={() => refetch()}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold"
@@ -1488,15 +1471,20 @@ export default function Markets() {
           {/* Infinite scroll sentinel — desktop */}
           {!isSearchMode && !isCategoryMode && (
             <div ref={loadMoreRef} className="mt-5 py-3 flex flex-col items-center gap-2">
-              {isFetchingNextPage && (
+              {hasMoreLocal && (
                 <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color:"#4a5068" }}>
                   <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor:"#2962ff", borderTopColor:"transparent" }} />
-                  Loading more coins…
+                  Loading more…
                 </div>
               )}
-              {!hasNextPage && allCoins.length > 0 && (
+              {isSyncingMore && !hasMoreLocal && (
                 <p className="text-[10px] font-mono" style={{ color:"#3a4058" }}>
-                  All {allCoins.length.toLocaleString()} coins loaded · CoinGecko coverage complete
+                  Syncing {syncProgress.pagesLoaded * 250}/{syncProgress.totalPages * 250} coins…
+                </p>
+              )}
+              {!isSyncingMore && !hasMoreLocal && allCoins.length > 0 && (
+                <p className="text-[10px] font-mono" style={{ color:"#3a4058" }}>
+                  All {allCoins.length.toLocaleString()} coins stored · 17,500+ coverage complete
                 </p>
               )}
             </div>
