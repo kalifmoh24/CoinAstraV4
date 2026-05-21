@@ -168,17 +168,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Row 1: Main nav bar */}
         <div className="h-12 flex items-center px-4 gap-3">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 shrink-0">
-            <motion.div
-              animate={{ boxShadow: ["0 0 10px rgba(41,98,255,0.4)", "0 0 20px rgba(41,98,255,0.7)", "0 0 10px rgba(41,98,255,0.4)"] }}
-              transition={{ duration: 2.5, repeat: Infinity }}
-              className="w-7 h-7 rounded-xl flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#2962ff,#7c3aed)" }}>
-              <Activity className="h-3.5 w-3.5 text-white" />
-            </motion.div>
-            <span className="hidden sm:inline text-[15px] font-black tracking-tight text-foreground">
-              Coin<span style={{ color: "#2962ff" }}>Astra</span>
-            </span>
+          <Link href="/" className="flex items-center gap-2 shrink-0" aria-label="CoinAstra home">
+            <motion.img
+              src="/coinastra-logo.png"
+              alt="CoinAstra"
+              animate={{ filter: ["drop-shadow(0 0 6px rgba(41,98,255,0.45))", "drop-shadow(0 0 12px rgba(124,58,237,0.65))", "drop-shadow(0 0 6px rgba(41,98,255,0.45))"] }}
+              transition={{ duration: 2.8, repeat: Infinity }}
+              className="h-8 w-auto select-none"
+              draggable={false}
+            />
           </Link>
 
           {/* Search bar (desktop) */}

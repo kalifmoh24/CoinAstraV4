@@ -280,16 +280,14 @@ export function MobileDashboard() {
         {/* Row 1: Logo + Controls */}
         <div className="flex items-center px-4 gap-2" style={{ height: 52 }}>
           <div className="flex items-center gap-2 shrink-0">
-            <motion.div
-              animate={{ boxShadow: ["0 0 12px rgba(41,98,255,0.4)", "0 0 22px rgba(41,98,255,0.7)", "0 0 12px rgba(41,98,255,0.4)"] }}
-              transition={{ duration: 2.5, repeat: Infinity }}
-              className="w-7 h-7 rounded-xl flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#2962ff,#7c3aed)" }}>
-              <Activity size={13} className="text-white" />
-            </motion.div>
-            <span className="text-[16px] font-black tracking-tight" style={{ color: isDark ? "white" : "#0d1117" }}>
-              Coin<span style={{ color: "#2962ff" }}>Astra</span>
-            </span>
+            <motion.img
+              src="/coinastra-logo.png"
+              alt="CoinAstra"
+              animate={{ filter: ["drop-shadow(0 0 6px rgba(41,98,255,0.45))", "drop-shadow(0 0 12px rgba(124,58,237,0.65))", "drop-shadow(0 0 6px rgba(41,98,255,0.45))"] }}
+              transition={{ duration: 2.8, repeat: Infinity }}
+              className="h-9 w-auto select-none"
+              draggable={false}
+            />
           </div>
 
           {/* Center: live market status pill */}
