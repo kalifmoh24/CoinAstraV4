@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, BarChart2, Brain, Star, Briefcase, Bell, User, Unlock } from "lucide-react";
+import { LayoutDashboard, BarChart2, Brain, Star, Briefcase, Newspaper, User, Unlock } from "lucide-react";
 
 const TABS = [
   { path: "/",           icon: LayoutDashboard, label: "Home",     color: "#2962ff" },
@@ -10,7 +10,7 @@ const TABS = [
   { path: "/ai-insights",icon: Brain,            label: "AI",       color: "#a855f7" },
   { path: "/watchlist",  icon: Star,             label: "Watch",    color: "#f7931a" },
   { path: "/portfolio",  icon: Briefcase,        label: "Portfolio",color: "#26a69a" },
-  { path: "/alerts",     icon: Bell,             label: "Alerts",   color: "#ef5350" },
+  { path: "/news",       icon: Newspaper,        label: "News",     color: "#ef5350" },
   { path: "/profile",    icon: User,             label: "Profile",  color: "#5a6072" },
 ];
 
@@ -55,8 +55,8 @@ export function MobileNav() {
                         transition={{ type: "spring", stiffness: 500, damping: 34 }}
                       />
                     )}
-                    {/* Notification dot for Alerts */}
-                    {tab.label === "Alerts" && (
+                    {/* Notification dot for News */}
+                    {tab.label === "News" && (
                       <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#ef5350] border border-[rgba(5,8,16,0.9)] z-20 animate-pulse" />
                     )}
                     <motion.div

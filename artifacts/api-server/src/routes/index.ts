@@ -6,6 +6,7 @@ import narrativesRouter from "./narratives";
 import signalsRouter from "./signals";
 import portfolioRouter from "./portfolio";
 import newsRouter from "./news";
+import newsLiveRouter from "./news_live";
 import authRouter from "./auth";
 import coinsRouter from "./coins";
 import watchlistRouter from "./watchlist";
@@ -24,5 +25,6 @@ router.use(narrativesRouter);
 router.use(signalsRouter);
 router.use(portfolioRouter);
 router.use(newsRouter);
+router.use(newsLiveRouter);
 
 export default router;
