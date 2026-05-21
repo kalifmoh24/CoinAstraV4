@@ -1,14 +1,25 @@
+import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 
-const secret = process.env["JWT_SECRET"];
+// CoinAstra v1 has no end-user auth, but the JWT helpers are still wired up
+// for future use. Prefer an explicit JWT_SECRET, then reuse SESSION_SECRET
+// (already provided by the platform), then fall back to a random per-process
+// secret so the server can boot in production without manual configuration.
+// If/when auth is added, set JWT_SECRET to a stable value.
+const explicit = process.env["JWT_SECRET"];
+const sessionSecret = process.env["SESSION_SECRET"];
+const fallback = explicit ?? sessionSecret ?? crypto.randomBytes(48).toString("hex");
 
-if (!secret) {
-  if (process.env["NODE_ENV"] === "production") {
-    throw new Error("JWT_SECRET environment variable is required in production.");
-  }
+if (!explicit && process.env["NODE_ENV"] === "production") {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[jwt] JWT_SECRET not set in production — using " +
+      (sessionSecret ? "SESSION_SECRET" : "an ephemeral random secret") +
+      ". Tokens will not survive process restarts.",
+  );
 }
 
-export const JWT_SECRET = secret ?? "coinastra-dev-secret-change-in-production";
+export const JWT_SECRET = fallback;
 export const JWT_EXPIRES_IN = "7d";
 export const JWT_REFRESH_EXPIRES_IN = "30d";
 
