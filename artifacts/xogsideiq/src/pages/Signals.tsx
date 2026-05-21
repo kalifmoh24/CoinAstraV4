@@ -77,7 +77,7 @@ export default function Signals() {
                     {signal.action}
                   </div>
                   <div>
-                    <Link href={`/research/${signal.tokenSymbol}`} className="font-bold text-lg hover:text-primary transition-colors">
+                    <Link href={`/coin/${signal.tokenSymbol.toUpperCase()}`} className="font-bold text-lg hover:text-primary transition-colors">
                       {signal.tokenSymbol}
                     </Link>
                     <div className="text-xs text-muted-foreground">{signal.timeframe} timeframe</div>

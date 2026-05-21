@@ -510,7 +510,7 @@ export default function Heatmap() {
   }, []);
 
   const onClick = useCallback((c: CoinMarket) => {
-    setLocation(`/research/${c.symbol.toLowerCase()}`);
+    setLocation(`/coin/${c.id}`);
   }, [setLocation]);
 
   const liveDot = lastRefreshedAt && Date.now() - lastRefreshedAt < 60_000;

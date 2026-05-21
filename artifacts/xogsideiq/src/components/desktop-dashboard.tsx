@@ -236,7 +236,7 @@ export function DesktopDashboard() {
   }, []);
 
   const [, setLocation] = useLocation();
-  const nav = (sym: string) => setLocation(`/research/${sym.toUpperCase()}`);
+  const nav = (sym: string) => setLocation(`/coin/${sym.toLowerCase()}`);
 
   const { data: cgCoins, isLoading: coinsLoading, dataUpdatedAt } = useLiveCoins();
   const { gainers, losers } = useGainersLosers(6);

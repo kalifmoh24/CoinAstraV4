@@ -374,7 +374,7 @@ function MobileCoinRow({ coin, idx, isWatched, onWatchlist }: {
       transition={{ duration:0.12, delay:Math.min(idx*0.012, 0.35) }}
       style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}
     >
-      <Link href={`/research/${coin.symbol.toUpperCase()}`}>
+      <Link href={`/coin/${coin.id}`}>
         <div className="flex items-center gap-3 px-4 py-3.5 active:bg-white/5 transition-colors cursor-pointer">
           <button
             className="shrink-0 p-1 -ml-1 rounded-lg active:scale-90 transition-transform"
@@ -1021,7 +1021,7 @@ export default function Markets() {
                                   transition={{ duration:0.1, delay:Math.min(idx*0.008,0.3) }}
                                   className="group"
                                   style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
-                                  onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
+                                  onClick={() => setLocation(`/coin/${coin.id}`)}
                                   onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background="rgba(41,98,255,0.04)"; }}
                                   onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background="transparent"; }}>
                                   <td className="pl-4 pr-2 py-3" onClick={e => e.stopPropagation()}>
@@ -1336,7 +1336,7 @@ export default function Markets() {
                                 initial={{ opacity:0 }} animate={{ opacity:1 }}
                                 transition={{ duration:0.1, delay:Math.min(idx*0.007,0.3) }}
                                 style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", cursor:"pointer" }}
-                                onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
+                                onClick={() => setLocation(`/coin/${coin.id}`)}
                                 onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background="rgba(41,98,255,0.04)"; }}
                                 onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background="transparent"; }}>
                                 <td className="pl-4 pr-2 py-3.5" onClick={e => e.stopPropagation()}>
@@ -1427,7 +1427,7 @@ export default function Markets() {
                       <motion.div key={coin.id}
                         initial={{ opacity:0, scale:0.96 }} animate={{ opacity:1, scale:1 }}
                         transition={{ duration:0.18, delay:Math.min(idx*0.01,0.4) }}
-                        onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
+                        onClick={() => setLocation(`/coin/${coin.id}`)}
                         className="rounded-2xl p-4 relative overflow-hidden group"
                         style={{ background:"rgba(13,17,26,0.8)", backdropFilter:"blur(20px)",
                           border:"1px solid rgba(255,255,255,0.05)", cursor:"pointer", transition:"all 0.2s" }}

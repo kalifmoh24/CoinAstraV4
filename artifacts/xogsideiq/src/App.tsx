@@ -46,6 +46,7 @@ function Router() {
             <Route path="/discover" component={Discover} />
             <Route path="/research" component={Research} />
             <Route path="/research/:symbol" component={TokenDetail} />
+            <Route path="/coin/:id" component={TokenDetail} />
             <Route path="/narratives" component={Narratives} />
             <Route path="/narratives/:slug" component={NarrativeDetail} />
             <Route path="/signals" component={Signals} />

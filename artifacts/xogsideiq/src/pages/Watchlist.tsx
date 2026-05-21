@@ -203,7 +203,7 @@ export default function Watchlist() {
                         onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = "rgba(247,147,26,0.04)"}
                         onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = "transparent"}>
                         <td className="px-3 py-3">
-                          <Link href={`/research/${coin.symbol}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                          <Link href={`/coin/${coin.coinId}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                             {coin.image && <img src={coin.image} alt={coin.name} className="w-6 h-6 rounded-full" />}
                             <div>
                               <div className="text-[12px] font-black text-white">{coin.symbol}</div>
@@ -289,7 +289,7 @@ export default function Watchlist() {
               </div>
               <div className="space-y-1.5">
                 {enriched.slice(0, 5).map(c => (
-                  <Link key={c.id} href={`/research/${c.symbol}`}
+                  <Link key={c.id} href={`/coin/${c.id}`}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-all">
                     {c.image && <img src={c.image} alt="" className="w-4 h-4 rounded-full" />}
                     <span className="text-[11px] font-semibold text-white">{c.symbol}</span>

@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import { useTokenLive, useCoinOHLC, useCoinChart, useCoinSearch, type CoinLiveData } from "@/hooks/use-coins";
 import { useLiveCoins, type LiveCoin } from "@/hooks/use-market-data";
+import { useAllCoins } from "@/hooks/use-all-coins";
 import { useAddToWatchlist, useRemoveFromWatchlist, useWatchlist } from "@/hooks/use-watchlist";
 import { analyzeToken } from "@/lib/ai-engine";
 import { formatNumber } from "@/lib/format";
@@ -1043,8 +1044,19 @@ function ScoresSidebar({ symbol }: { symbol: string }) {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export default function TokenDetail({ params }: { params: { symbol: string } }) {
-  const symbol = params.symbol.toUpperCase();
+export default function TokenDetail({ params }: { params: { symbol?: string; id?: string } }) {
+  // Route is explicit: `/coin/:id` passes a CoinGecko id (e.g. "bitcoin"),
+  // `/research/:symbol` passes a ticker symbol (e.g. "BTC"). Resolve id → symbol
+  // deterministically via the all-coins index.
+  const rawId = params.id?.trim().toLowerCase();
+  const rawSymbol = params.symbol?.trim().toUpperCase();
+  const { coins } = useAllCoins();
+  const symbol = useMemo(() => {
+    if (rawSymbol) return rawSymbol;
+    if (!rawId) return "";
+    const hit = coins.find(c => c.id === rawId);
+    return (hit?.symbol ?? rawId).toUpperCase();
+  }, [rawId, rawSymbol, coins]);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
 
   const { data: live, isLoading: liveLoading } = useTokenLive(symbol);
