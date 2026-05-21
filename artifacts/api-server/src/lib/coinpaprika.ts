@@ -216,6 +216,11 @@ export async function paprikaSearch(query: string, limit = 20): Promise<{ coins:
   };
 }
 
+// Note: Coinpaprika has a historical price endpoint (/v1/tickers/{id}/historical)
+// but it requires a paid plan (returns HTTP 402). When CoinGecko chart fails
+// we synthesize a line chart from cached OHLC closes instead — see
+// `getCoinChart` in coingecko.ts.
+
 // ── Global market data fallback ───────────────────────────────────────────
 interface CpGlobal {
   market_cap_usd: number;

@@ -247,7 +247,7 @@ function CoinHeader({ symbol, live }: { symbol: string; live: CoinLiveData | und
               <Star className="h-3.5 w-3.5" style={{ fill: "#f7931a" }} /> Watching
             </button>
           ) : (
-            <button onClick={() => add.mutate({ coinId: symbol.toLowerCase(), symbol, name: live?.name ?? symbol, image: live?.image })}
+            <button onClick={() => add.mutate({ coinId: live?.id ?? symbol.toLowerCase(), symbol, name: live?.name ?? symbol, image: live?.image })}
               disabled={add.isPending}
               className="flex items-center gap-1.5 px-3 h-9 rounded-xl text-[11px] font-bold transition-all hover:bg-white/5"
               style={{ background: "rgba(255,255,255,0.05)", color: "#a0a8bc", border: "1px solid rgba(255,255,255,0.09)" }}>

@@ -420,11 +420,25 @@ export async function getCoinDetails(id: string): Promise<CoinDetails> {
 }
 
 export async function getCoinChart(id: string, days: number): Promise<{ prices: [number, number][]; market_caps: [number, number][]; total_volumes: [number, number][] }> {
-  return cgFetch(`/coins/${encodeURIComponent(id)}/market_chart`, TTL.CHART, {
-    vs_currency: "usd",
-    days: String(days),
-    interval: days <= 1 ? "hourly" : "daily",
-  });
+  try {
+    return await cgFetch(`/coins/${encodeURIComponent(id)}/market_chart`, TTL.CHART, {
+      vs_currency: "usd",
+      days: String(days),
+      interval: days <= 1 ? "hourly" : "daily",
+    });
+  } catch (err) {
+    logger.warn({ err, id, days }, "CoinGecko chart failed → synthesize from OHLC");
+    // OHLC is more reliably cached. Derive line/area points from the close
+    // of each OHLC candle — same shape the frontend expects.
+    try {
+      const ohlc = await getCoinOHLC(id, days);
+      const prices: [number, number][] = ohlc.map(c => [c[0]!, c[4]!]);
+      return { prices, market_caps: [], total_volumes: [] };
+    } catch (err2) {
+      logger.warn({ err: err2, id, days }, "OHLC fallback also failed");
+      throw err;
+    }
+  }
 }
 
 export async function getTrending(): Promise<{ coins: { item: TrendingItem }[] }> {

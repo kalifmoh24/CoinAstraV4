@@ -289,7 +289,7 @@ export default function Watchlist() {
               </div>
               <div className="space-y-1.5">
                 {enriched.slice(0, 5).map(c => (
-                  <Link key={c.id} href={`/coin/${c.id}`}
+                  <Link key={c.id} href={`/coin/${c.coinId}`}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-all">
                     {c.image && <img src={c.image} alt="" className="w-4 h-4 rounded-full" />}
                     <span className="text-[11px] font-semibold text-white">{c.symbol}</span>
