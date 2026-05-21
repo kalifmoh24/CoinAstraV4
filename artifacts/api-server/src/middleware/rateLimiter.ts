@@ -1,6 +1,11 @@
 import rateLimit from "express-rate-limit";
 
-export const globalLimiter = rateLimit({
+const createRateLimiter = (options: Parameters<typeof rateLimit>[0]) => {
+  const rateLimitFn = (rateLimit as unknown as { default?: typeof rateLimit }).default ?? rateLimit;
+  return rateLimitFn(options);
+};
+
+export const globalLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 3000,
   standardHeaders: "draft-7",
@@ -9,7 +14,7 @@ export const globalLimiter = rateLimit({
   skip: () => process.env["NODE_ENV"] === "test",
 });
 
-export const authLimiter = rateLimit({
+export const authLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: "draft-7",
@@ -18,7 +23,7 @@ export const authLimiter = rateLimit({
   skip: () => process.env["NODE_ENV"] === "test",
 });
 
-export const apiLimiter = rateLimit({
+export const apiLimiter = createRateLimiter({
   windowMs: 1 * 60 * 1000,
   max: 600,
   standardHeaders: "draft-7",
