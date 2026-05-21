@@ -1,0 +1,197 @@
+Transform the CoinAstra Heatmap into a next-generation institutional crypto market visualization terminal.
+
+MAIN GOAL:
+Replace the current basic heatmap bubbles/blocks with an ultra-premium, visually rich, highly interactive professional market heatmap system.
+
+====================================================
+HEATMAP VISUAL UPGRADE
+====================================================
+
+1. Replace current static rectangles with:
+- smooth animated bubbles/cards
+- rounded premium tiles
+- dynamic glow effects
+- glassmorphism overlays
+- animated gradients
+- hover motion physics
+
+====================================================
+2. ADVANCED TILE DESIGN
+====================================================
+
+Each coin tile must display:
+- logo
+- symbol
+- full name
+- live price
+- 24h %
+- market cap
+- volume
+- dominance %
+- mini sparkline
+- AI sentiment
+- sector/category
+
+====================================================
+3. TILE SIZING LOGIC
+====================================================
+
+Allow multiple sizing modes:
+- market cap
+- volume
+- volatility
+- dominance
+- AI score
+- trending score
+- social activity
+
+Add top controls to switch sizing instantly.
+
+====================================================
+4. COLOR ENGINE
+====================================================
+
+Replace simple red/green with:
+- smooth gradients
+- intensity scaling
+- volatility glow
+- animated pulse on high movement
+
+Examples:
+- extreme bullish = glowing emerald
+- mild bullish = soft green
+- bearish = deep crimson
+- neutral = blue/gray
+
+====================================================
+5. PROFESSIONAL INTERACTION
+====================================================
+
+On hover:
+- tile expands smoothly
+- richer metrics appear
+- live market stats animate in
+- chart preview appears
+- related narrative appears
+
+On click:
+- open advanced coin intelligence modal/page
+
+====================================================
+6. HEATMAP MODES
+====================================================
+
+Add switchable modes:
+- Market Cap
+- Performance
+- Volume
+- AI Narrative
+- Meme Coins
+- AI Coins
+- DeFi
+- Layer 1
+- Stablecoins
+- Solana Ecosystem
+- Ethereum Ecosystem
+- Gaming
+- RWA
+- Trending
+- Smart Money
+- Whale Activity
+
+====================================================
+7. ADVANCED VISUALIZATION
+====================================================
+
+Add:
+- zooming
+- panning
+- animated transitions
+- live updates
+- morphing layouts
+- cluster grouping
+- sector grouping
+- ecosystem grouping
+
+====================================================
+8. LIVE MARKET ENGINE
+====================================================
+
+Refresh every 30 seconds silently:
+- no flicker
+- no hard rerender
+- animated value transitions only
+
+====================================================
+9. PERFORMANCE
+====================================================
+
+Support:
+- 20k+ coins
+- virtualization
+- lazy rendering
+- GPU acceleration
+- request batching
+- cached rendering
+
+Heatmap must remain extremely smooth.
+
+====================================================
+10. PREMIUM PANELS
+====================================================
+
+Add top analytics bar:
+- total market cap
+- gainers %
+- losers %
+- sector strength
+- BTC dominance
+- Fear & Greed
+- top narrative
+
+====================================================
+11. AI OVERLAY
+====================================================
+
+Add AI intelligence layer:
+- strongest narratives
+- hottest sectors
+- unusual activity
+- momentum rotation
+- smart money flow
+
+====================================================
+12. PROFESSIONAL UI
+====================================================
+
+Make heatmap feel:
+- more advanced than CoinMarketCap
+- more advanced than TradingView
+- more advanced than Quant terminals
+
+Use:
+- premium dark gradients
+- glow shadows
+- ultra-smooth animations
+- high-end institutional UI
+
+====================================================
+13. MOBILE EXPERIENCE
+====================================================
+
+Create:
+- responsive heatmap
+- pinch zoom
+- drag navigation
+- adaptive tile scaling
+
+====================================================
+14. IMPORTANT
+====================================================
+
+- maintain CoinAstra visual identity
+- keep loading instant
+- avoid UI freezing
+- keep animations GPU optimized
+- use memoization and virtualization
+- no broken data states

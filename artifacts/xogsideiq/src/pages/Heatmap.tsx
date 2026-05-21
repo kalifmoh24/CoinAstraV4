@@ -1,620 +1,792 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
-import { LayoutGrid, TrendingUp, TrendingDown, RefreshCw, Activity } from "lucide-react";
-import { useLiveCoins } from "@/hooks/use-market-data";
-import type { LiveCoin } from "@/hooks/use-market-data";
+import {
+  LayoutGrid, TrendingUp, TrendingDown, Activity, Flame,
+  Layers, Sparkles, Zap, BarChart3, DollarSign, Gauge,
+} from "lucide-react";
+import { useAllCoins } from "@/hooks/use-all-coins";
+import type { CoinMarket } from "@/hooks/use-all-coins";
 
-/* ── Types ──────────────────────────────────────────────────────────────────── */
-
-type TimeView = "1h" | "24h" | "7d" | "30d";
-
-interface HeatCoin {
-  id: string;
-  symbol: string;
-  name: string;
-  image: string;
-  price: number;
-  ch24: number;
-  ch7d: number;
-  mcap: number;
-  sector: string;
-}
-
-interface TreeRect {
-  id: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  coin: HeatCoin;
-}
-
-/* ── Sector mapping ─────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────────
+ * Sector taxonomy — extends the bgSync coin universe with category metadata
+ * ──────────────────────────────────────────────────────────────────────────── */
 
 const COIN_SECTOR: Record<string, string> = {
-  bitcoin: "Layer 1", ethereum: "Layer 1", solana: "Layer 1",
-  binancecoin: "Layer 1", ripple: "Layer 1", cardano: "Layer 1",
-  "avalanche-2": "Layer 1", polkadot: "Layer 1", near: "Layer 1",
-  tron: "Layer 1", cosmos: "Layer 1", toncoin: "Layer 1",
-  aptos: "Layer 1", sui: "Layer 1", algorand: "Layer 1",
+  bitcoin: "Layer 1", ethereum: "Layer 1", solana: "Layer 1", binancecoin: "Layer 1",
+  ripple: "Layer 1", cardano: "Layer 1", "avalanche-2": "Layer 1", polkadot: "Layer 1",
+  near: "Layer 1", tron: "Layer 1", cosmos: "Layer 1", toncoin: "Layer 1",
+  aptos: "Layer 1", sui: "Layer 1", algorand: "Layer 1", hedera: "Layer 1",
   arbitrum: "Layer 2", optimism: "Layer 2", "matic-network": "Layer 2",
-  starknet: "Layer 2", loopring: "Layer 2", mantle: "Layer 2",
-  "immutable-x": "Layer 2", "metis-token": "Layer 2", base: "Layer 2",
+  starknet: "Layer 2", mantle: "Layer 2", "immutable-x": "Layer 2", base: "Layer 2",
+  blast: "Layer 2", "zksync-id": "Layer 2",
   uniswap: "DeFi", aave: "DeFi", chainlink: "DeFi", maker: "DeFi",
   "compound-governance-token": "DeFi", "curve-dao-token": "DeFi",
   "synthetix-network-token": "DeFi", "injective-protocol": "DeFi",
   gmx: "DeFi", pendle: "DeFi", dydx: "DeFi", balancer: "DeFi",
   "1inch": "DeFi", "pancakeswap-token": "DeFi", "jito-governance-token": "DeFi",
-  dogecoin: "Meme", "shiba-inu": "Meme", pepe: "Meme",
-  bonk: "Meme", floki: "Meme", dogwifhat: "Meme",
-  "mog-coin": "Meme", brett: "Meme", "book-of-meme": "Meme",
+  ondo: "DeFi", lido: "DeFi", "ether-fi": "DeFi", "rocket-pool": "DeFi",
+  dogecoin: "Meme", "shiba-inu": "Meme", pepe: "Meme", bonk: "Meme",
+  floki: "Meme", dogwifhat: "Meme", "mog-coin": "Meme", brett: "Meme",
+  "book-of-meme": "Meme", popcat: "Meme", "neiro-on-eth": "Meme", giga: "Meme",
   "render-token": "AI", "fetch-ai": "AI", singularitynet: "AI",
   "ocean-protocol": "AI", bittensor: "AI", "worldcoin-wld": "AI",
-  "akash-network": "AI", "the-graph": "AI", cortex: "AI",
+  "akash-network": "AI", "the-graph": "AI", "near-protocol": "AI",
+  "ai16z": "AI", "virtuals-protocol": "AI", "ai-rig-complex": "AI",
   "the-sandbox": "Gaming", "axie-infinity": "Gaming", decentraland: "Gaming",
-  gala: "Gaming", illuvium: "Gaming", ronin: "Gaming",
-  "ondo-finance": "RWA", maple: "RWA", centrifuge: "RWA",
+  gala: "Gaming", illuvium: "Gaming", ronin: "Gaming", "pixels": "Gaming",
+  beam: "Gaming", "echelon-prime": "Gaming",
+  "ondo-finance": "RWA", maple: "RWA", centrifuge: "RWA", "mantra-dao": "RWA",
+  "pendle-finance": "RWA",
   helium: "DePIN", iotex: "DePIN", flux: "DePIN", hivemapper: "DePIN",
+  "render-network": "DePIN", "filecoin": "DePIN",
   tether: "Stables", "usd-coin": "Stables", dai: "Stables",
-  "binance-usd": "Stables", "true-usd": "Stables",
+  "binance-usd": "Stables", "true-usd": "Stables", "first-digital-usd": "Stables",
+  "ethena-usde": "Stables", "frax": "Stables",
 };
 
-const SECTOR_META: Record<string, { color: string; darkColor: string; order: number }> = {
-  "Layer 1": { color: "#26a69a", darkColor: "#0d3d38", order: 0 },
-  "DeFi":    { color: "#7c3aed", darkColor: "#2a1550", order: 1 },
-  "Meme":    { color: "#f59e0b", darkColor: "#3d2800", order: 2 },
-  "Layer 2": { color: "#0ea5e9", darkColor: "#062a3d", order: 3 },
-  "AI":      { color: "#a78bfa", darkColor: "#2a1d4d", order: 4 },
-  "Gaming":  { color: "#f97316", darkColor: "#3d1a00", order: 5 },
-  "RWA":     { color: "#10b981", darkColor: "#063d2a", order: 6 },
-  "DePIN":   { color: "#ec4899", darkColor: "#3d0625", order: 7 },
-  "Stables": { color: "#5a6072", darkColor: "#1a1e28", order: 8 },
+interface SectorMeta { color: string; glowColor: string; icon: typeof Layers; }
+const SECTOR_META: Record<string, SectorMeta> = {
+  "Layer 1": { color: "#26a69a", glowColor: "rgba(38,166,154,0.5)", icon: Layers },
+  "Layer 2": { color: "#0ea5e9", glowColor: "rgba(14,165,233,0.5)", icon: Zap },
+  "DeFi":    { color: "#7c3aed", glowColor: "rgba(124,58,237,0.5)", icon: DollarSign },
+  "AI":      { color: "#a78bfa", glowColor: "rgba(167,139,250,0.5)", icon: Sparkles },
+  "Meme":    { color: "#f59e0b", glowColor: "rgba(245,158,11,0.5)", icon: Flame },
+  "Gaming":  { color: "#f97316", glowColor: "rgba(249,115,22,0.5)", icon: Activity },
+  "RWA":     { color: "#10b981", glowColor: "rgba(16,185,129,0.5)", icon: BarChart3 },
+  "DePIN":   { color: "#ec4899", glowColor: "rgba(236,72,153,0.5)", icon: Gauge },
+  "Stables": { color: "#5a6072", glowColor: "rgba(90,96,114,0.3)", icon: Layers },
+  "Other":   { color: "#4d7fff", glowColor: "rgba(77,127,255,0.4)", icon: LayoutGrid },
 };
 
-/* ── Static fallback data (top 50 coins) ────────────────────────────────────── */
+function sectorOf(coin: CoinMarket): string {
+  return COIN_SECTOR[coin.id] ?? "Other";
+}
 
-const STATIC_COINS: HeatCoin[] = [
-  { id:"bitcoin",      symbol:"BTC",   name:"Bitcoin",       image:"https://assets.coingecko.com/coins/images/1/thumb/bitcoin.png",     price:81198,  ch24:-0.1,  ch7d:-2.1,  mcap:1610000, sector:"Layer 1" },
-  { id:"ethereum",     symbol:"ETH",   name:"Ethereum",      image:"https://assets.coingecko.com/coins/images/279/thumb/ethereum.png",   price:2305,   ch24:-0.3,  ch7d:-3.0,  mcap:277000,  sector:"Layer 1" },
-  { id:"tether",       symbol:"USDT",  name:"Tether",        image:"https://assets.coingecko.com/coins/images/325/thumb/Tether.png",     price:1.0,    ch24:0.01,  ch7d:0.02,  mcap:145000,  sector:"Stables" },
-  { id:"binancecoin",  symbol:"BNB",   name:"BNB",           image:"https://assets.coingecko.com/coins/images/825/thumb/bnb-icon2_2x.png",price:599,  ch24:0.2,   ch7d:1.8,   mcap:84000,   sector:"Layer 1" },
-  { id:"ripple",       symbol:"XRP",   name:"XRP",           image:"https://assets.coingecko.com/coins/images/44/thumb/xrp-symbol-white-128.png", price:2.14, ch24:1.1, ch7d:4.4, mcap:122000, sector:"Layer 1" },
-  { id:"usd-coin",     symbol:"USDC",  name:"USDC",          image:"https://assets.coingecko.com/coins/images/6319/thumb/usdc.png",      price:1.0,    ch24:0.01,  ch7d:0.01,  mcap:60000,   sector:"Stables" },
-  { id:"solana",       symbol:"SOL",   name:"Solana",        image:"https://assets.coingecko.com/coins/images/4128/thumb/solana.png",    price:95.61,  ch24:-0.8,  ch7d:-5.2,  mcap:46000,   sector:"Layer 1" },
-  { id:"dogecoin",     symbol:"DOGE",  name:"Dogecoin",      image:"https://assets.coingecko.com/coins/images/5/thumb/dogecoin.png",     price:0.168,  ch24:-2.1,  ch7d:-4.8,  mcap:24800,   sector:"Meme"    },
-  { id:"tron",         symbol:"TRX",   name:"TRON",          image:"https://assets.coingecko.com/coins/images/1094/thumb/tron-logo.png", price:0.244,  ch24:0.3,   ch7d:1.8,   mcap:21000,   sector:"Layer 1" },
-  { id:"cardano",      symbol:"ADA",   name:"Cardano",       image:"https://assets.coingecko.com/coins/images/975/thumb/cardano.png",    price:0.68,   ch24:-0.4,  ch7d:-1.2,  mcap:24000,   sector:"Layer 1" },
-  { id:"toncoin",      symbol:"TON",   name:"Toncoin",       image:"https://assets.coingecko.com/coins/images/17980/thumb/ton_symbol.png",price:3.12, ch24:0.9,   ch7d:3.4,   mcap:7900,    sector:"Layer 1" },
-  { id:"shiba-inu",    symbol:"SHIB",  name:"Shiba Inu",     image:"https://assets.coingecko.com/coins/images/11939/thumb/shiba.png",   price:0.0000138,ch24:-1.4,ch7d:-3.2,  mcap:8100,    sector:"Meme"    },
-  { id:"chainlink",    symbol:"LINK",  name:"Chainlink",     image:"https://assets.coingecko.com/coins/images/877/thumb/chainlink-new-logo.png", price:13.4, ch24:4.3, ch7d:12.1, mcap:8200, sector:"DeFi" },
-  { id:"avalanche-2",  symbol:"AVAX",  name:"Avalanche",     image:"https://assets.coingecko.com/coins/images/12559/thumb/Avalanche_Circle_RedWhite_Trans.png", price:20.4, ch24:0.8, ch7d:3.1, mcap:8400, sector:"Layer 1" },
-  { id:"sui",          symbol:"SUI",   name:"Sui",           image:"https://assets.coingecko.com/coins/images/26375/thumb/sui_asset.jpeg", price:2.48, ch24:2.1, ch7d:8.2, mcap:6200, sector:"Layer 1" },
-  { id:"polkadot",     symbol:"DOT",   name:"Polkadot",      image:"https://assets.coingecko.com/coins/images/12171/thumb/polkadot.png", price:4.12, ch24:-0.6, ch7d:-2.4, mcap:6300, sector:"Layer 1" },
-  { id:"near",         symbol:"NEAR",  name:"NEAR Protocol", image:"https://assets.coingecko.com/coins/images/10365/thumb/near.jpg", price:2.46, ch24:1.4, ch7d:5.2, mcap:2900, sector:"Layer 1" },
-  { id:"uniswap",      symbol:"UNI",   name:"Uniswap",       image:"https://assets.coingecko.com/coins/images/12504/thumb/uniswap-uni.png", price:6.12, ch24:2.1, ch7d:8.4, mcap:3700, sector:"DeFi" },
-  { id:"aptos",        symbol:"APT",   name:"Aptos",         image:"https://assets.coingecko.com/coins/images/26455/thumb/aptos_round.png", price:5.44, ch24:1.2, ch7d:4.8, mcap:2800, sector:"Layer 1" },
-  { id:"pepe",         symbol:"PEPE",  name:"Pepe",          image:"https://assets.coingecko.com/coins/images/29850/thumb/pepe-token.jpeg", price:0.0000082, ch24:0.8, ch7d:2.4, mcap:3460, sector:"Meme" },
-  { id:"bittensor",    symbol:"TAO",   name:"Bittensor",     image:"https://assets.coingecko.com/coins/images/28452/thumb/ARUsPeNQ_400x400.jpeg", price:328, ch24:5.4, ch7d:18.2, mcap:2100, sector:"AI" },
-  { id:"arbitrum",     symbol:"ARB",   name:"Arbitrum",      image:"https://assets.coingecko.com/coins/images/16547/thumb/photo_2023-03-29_21.47.00.jpeg", price:0.44, ch24:0.6, ch7d:3.1, mcap:1760, sector:"Layer 2" },
-  { id:"cosmos",       symbol:"ATOM",  name:"Cosmos",        image:"https://assets.coingecko.com/coins/images/1481/thumb/cosmos_hub.png", price:4.88, ch24:-0.2, ch7d:-1.1, mcap:1900, sector:"Layer 1" },
-  { id:"render-token", symbol:"RNDR",  name:"Render",        image:"https://assets.coingecko.com/coins/images/11636/thumb/rndr.png", price:4.12, ch24:3.1, ch7d:9.8, mcap:1980, sector:"AI" },
-  { id:"optimism",     symbol:"OP",    name:"Optimism",      image:"https://assets.coingecko.com/coins/images/25244/thumb/Optimism.png", price:0.88, ch24:1.2, ch7d:4.8, mcap:1170, sector:"Layer 2" },
-  { id:"matic-network",symbol:"POL",   name:"Polygon",       image:"https://assets.coingecko.com/coins/images/4713/thumb/matic-token-icon.png", price:0.28, ch24:-0.4, ch7d:2.2, mcap:2800, sector:"Layer 2" },
-  { id:"maker",        symbol:"MKR",   name:"Maker",         image:"https://assets.coingecko.com/coins/images/1364/thumb/Mark_Maker.png", price:1480, ch24:1.2, ch7d:4.8, mcap:1700, sector:"DeFi" },
-  { id:"aave",         symbol:"AAVE",  name:"Aave",          image:"https://assets.coingecko.com/coins/images/12645/thumb/AAVE.png", price:198, ch24:1.8, ch7d:7.2, mcap:3200, sector:"DeFi" },
-  { id:"the-graph",    symbol:"GRT",   name:"The Graph",     image:"https://assets.coingecko.com/coins/images/13397/thumb/Graph_Token.png", price:0.118, ch24:1.4, ch7d:4.8, mcap:1100, sector:"AI" },
-  { id:"bonk",         symbol:"BONK",  name:"Bonk",          image:"https://assets.coingecko.com/coins/images/28600/thumb/bonk.jpg", price:0.0000188, ch24:14.8, ch7d:42.1, mcap:1390, sector:"Meme" },
-  { id:"dogwifhat",    symbol:"WIF",   name:"dogwifhat",     image:"https://assets.coingecko.com/coins/images/33566/thumb/dogwifhat.jpg", price:0.82, ch24:7.6, ch7d:19.8, mcap:822, sector:"Meme" },
-  { id:"fetch-ai",     symbol:"FET",   name:"Fetch.ai",      image:"https://assets.coingecko.com/coins/images/5681/thumb/Fetch.jpg", price:1.24, ch24:4.2, ch7d:11.4, mcap:1060, sector:"AI" },
-  { id:"floki",        symbol:"FLOKI", name:"Floki",         image:"https://assets.coingecko.com/coins/images/16746/thumb/PNG_image.png", price:0.0000842, ch24:3.2, ch7d:8.4, mcap:800, sector:"Meme" },
-  { id:"injective-protocol",symbol:"INJ",name:"Injective",  image:"https://assets.coingecko.com/coins/images/12882/thumb/Secondary_Symbol.png", price:12.8, ch24:2.9, ch7d:7.4, mcap:1200, sector:"DeFi" },
-  { id:"the-sandbox",  symbol:"SAND",  name:"The Sandbox",  image:"https://assets.coingecko.com/coins/images/12129/thumb/sandbox_logo.jpg", price:0.288, ch24:-1.2, ch7d:-2.4, mcap:680, sector:"Gaming" },
-  { id:"axie-infinity",symbol:"AXS",   name:"Axie Infinity", image:"https://assets.coingecko.com/coins/images/13029/thumb/axie_infinity_logo.png", price:5.12, ch24:-0.8, ch7d:-1.8, mcap:840, sector:"Gaming" },
-  { id:"ondo-finance", symbol:"ONDO",  name:"Ondo Finance",  image:"https://assets.coingecko.com/coins/images/26580/thumb/ONDO.png", price:0.892, ch24:3.4, ch7d:12.4, mcap:1280, sector:"RWA" },
-  { id:"ronin",        symbol:"RON",   name:"Ronin",         image:"https://assets.coingecko.com/coins/images/20009/thumb/ronin.jpg", price:1.44, ch24:1.4, ch7d:4.8, mcap:780, sector:"Gaming" },
-  { id:"decentraland", symbol:"MANA",  name:"Decentraland",  image:"https://assets.coingecko.com/coins/images/878/thumb/decentraland-mana.png", price:0.308, ch24:-0.4, ch7d:-1.2, mcap:590, sector:"Gaming" },
-  { id:"singularitynet",symbol:"AGIX", name:"SingularityNET",image:"https://assets.coingecko.com/coins/images/2138/thumb/singularitynet.png", price:0.48, ch24:2.8, ch7d:8.2, mcap:640, sector:"AI" },
-  { id:"ocean-protocol",symbol:"OCEAN",name:"Ocean Protocol",image:"https://assets.coingecko.com/coins/images/3687/thumb/ocean-protocol-logo.jpg", price:0.68, ch24:2.1, ch7d:7.4, mcap:380, sector:"AI" },
-  { id:"curve-dao-token",symbol:"CRV", name:"Curve DAO",    image:"https://assets.coingecko.com/coins/images/12124/thumb/Curve.png", price:0.42, ch24:1.2, ch7d:3.4, mcap:520, sector:"DeFi" },
-  { id:"helium",       symbol:"HNT",   name:"Helium",        image:"https://assets.coingecko.com/coins/images/4284/thumb/Helium_HNT.png", price:4.22, ch24:2.8, ch7d:9.4, mcap:600, sector:"DePIN" },
-  { id:"gala",         symbol:"GALA",  name:"Gala",          image:"https://assets.coingecko.com/coins/images/12493/thumb/GALA-COINGECKO.png", price:0.022, ch24:0.8, ch7d:2.4, mcap:480, sector:"Gaming" },
-  { id:"pendle",       symbol:"PENDLE",name:"Pendle",        image:"https://assets.coingecko.com/coins/images/15069/thumb/Pendle_Logo_Normal-03.png", price:3.84, ch24:4.8, ch7d:16.9, mcap:520, sector:"DeFi" },
-  { id:"akash-network",symbol:"AKT",   name:"Akash Network", image:"https://assets.coingecko.com/coins/images/4618/thumb/akash-logo.png", price:2.84, ch24:3.8, ch7d:12.4, mcap:720, sector:"AI" },
-  { id:"iotex",        symbol:"IOTX",  name:"IoTeX",         image:"https://assets.coingecko.com/coins/images/3334/thumb/iotex-logo.png", price:0.054, ch24:1.8, ch7d:6.4, mcap:410, sector:"DePIN" },
-  { id:"flux",         symbol:"FLUX",  name:"Flux",          image:"https://assets.coingecko.com/coins/images/5163/thumb/Flux_symbol_blue-white.png", price:0.48, ch24:2.4, ch7d:8.2, mcap:300, sector:"DePIN" },
-  { id:"dydx",         symbol:"DYDX",  name:"dYdX",          image:"https://assets.coingecko.com/coins/images/17500/thumb/hjnIm9bV.jpg", price:0.74, ch24:2.1, ch7d:6.8, mcap:480, sector:"DeFi" },
-  { id:"gmx",          symbol:"GMX",   name:"GMX",           image:"https://assets.coingecko.com/coins/images/18323/thumb/arbit.png", price:18.4, ch24:2.1, ch7d:6.8, mcap:220, sector:"DeFi" },
+/* ────────────────────────────────────────────────────────────────────────────
+ * Modes & sizing
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+type SizeMode  = "mcap" | "volume" | "volatility" | "ai_score";
+type ViewMode  = "1h" | "24h" | "7d";
+type CountMode = 50 | 100 | 200 | 500;
+
+const SIZE_MODES: { id: SizeMode; label: string; icon: typeof BarChart3 }[] = [
+  { id: "mcap",       label: "Market Cap", icon: DollarSign },
+  { id: "volume",     label: "Volume 24h", icon: BarChart3 },
+  { id: "volatility", label: "Volatility", icon: Activity   },
+  { id: "ai_score",   label: "AI Score",   icon: Sparkles   },
 ];
 
-/* ── Treemap algorithm ──────────────────────────────────────────────────────── */
+const SECTORS_ORDER = [
+  "All", "Trending", "Layer 1", "Layer 2", "DeFi", "AI",
+  "Meme", "Gaming", "RWA", "DePIN", "Stables", "Other",
+];
 
-interface TileInput { id: string; value: number; data: HeatCoin }
-interface TileOutput extends TileInput { x: number; y: number; w: number; h: number }
+/* ────────────────────────────────────────────────────────────────────────────
+ * Treemap layout — squarified slice-and-dice
+ * ──────────────────────────────────────────────────────────────────────────── */
 
-function buildTreemap(items: TileInput[], x: number, y: number, w: number, h: number): TileOutput[] {
-  if (!items.length) return [];
+interface TileIn  { id: string; value: number; coin: CoinMarket; pct: number; }
+interface TileOut extends TileIn { x: number; y: number; w: number; h: number; }
+
+function buildTreemap(items: TileIn[], x: number, y: number, w: number, h: number): TileOut[] {
+  // Stop subdividing once the region is too small to be meaningful
+  if (items.length === 0 || w < 2 || h < 2) return [];
   if (items.length === 1) return [{ ...items[0], x, y, w, h }];
 
-  const total = items.reduce((s, it) => s + it.value, 0);
-  let cumul = 0;
-  let splitIdx = 0;
+  const total = items.reduce((s, it) => s + it.value, 0) || 1;
+  let cumul = 0, splitIdx = 0;
   for (let i = 0; i < items.length; i++) {
     cumul += items[i].value;
     if (cumul >= total / 2) { splitIdx = i + 1; break; }
   }
-  if (splitIdx === 0) splitIdx = 1;
+  if (splitIdx === 0)              splitIdx = 1;
+  if (splitIdx >= items.length)    splitIdx = items.length - 1;
 
   const first  = items.slice(0, splitIdx);
   const second = items.slice(splitIdx);
-  const ratio  = first.reduce((s, it) => s + it.value, 0) / total;
+  const firstSum = first.reduce((s, it) => s + it.value, 0);
+  // Clamp ratio to (0, 1) so neither partition is zero or larger than parent
+  const ratio  = Math.max(0.02, Math.min(0.98, firstSum / total));
 
   if (w >= h) {
     const w1 = w * ratio;
+    const w2 = w - w1;
     return [
-      ...buildTreemap(first,  x,      y, w1,     h),
-      ...buildTreemap(second, x + w1, y, w - w1, h),
-    ];
-  } else {
-    const h1 = h * ratio;
-    return [
-      ...buildTreemap(first,  x, y,      w, h1),
-      ...buildTreemap(second, x, y + h1, w, h - h1),
+      ...buildTreemap(first,  x,      y, w1, h),
+      ...buildTreemap(second, x + w1, y, w2, h),
     ];
   }
+  const h1 = h * ratio;
+  const h2 = h - h1;
+  return [
+    ...buildTreemap(first,  x, y,      w, h1),
+    ...buildTreemap(second, x, y + h1, w, h2),
+  ];
 }
 
-/* ── Color helpers ──────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────────
+ * Color engine — intensity-scaled gradients with glow
+ * ──────────────────────────────────────────────────────────────────────────── */
 
-function heatBg(pct: number): string {
-  if (pct >=  10) return "#0b3d2e";
-  if (pct >=   5) return "#0f5040";
-  if (pct >=   2) return "#156b52";
-  if (pct >=  0.5)return "#1a8066";
-  if (pct >=   0) return "#0e3d30";
-  if (pct >= -0.5)return "#2c1010";
-  if (pct >=  -2) return "#4a1616";
-  if (pct >=  -5) return "#682020";
-  return "#882828";
-}
-function heatBorder(pct: number): string {
-  if (pct >=   2) return "rgba(38,166,154,0.4)";
-  if (pct >=   0) return "rgba(38,166,154,0.15)";
-  if (pct >=  -2) return "rgba(239,83,80,0.15)";
-  return "rgba(239,83,80,0.4)";
-}
-function heatText(pct: number): string {
-  return pct >= 0 ? "#a7f3d0" : "#fca5a5";
+function tileVisuals(pct: number): { bg: string; glow: string; border: string; text: string } {
+  const clamped = Math.max(-15, Math.min(15, pct));
+  const I = Math.abs(clamped) / 15;
+
+  if (clamped >= 0.3) {
+    const r = Math.round(10 + 30 * I);
+    const g = Math.round(50 + 130 * I);
+    const b = Math.round(40 + 30 * I);
+    return {
+      bg: `linear-gradient(135deg, rgb(${Math.max(0,r-8)},${Math.max(0,g-15)},${Math.max(0,b-5)}) 0%, rgb(${Math.min(255,r+12)},${Math.min(255,g+25)},${Math.min(255,b+8)}) 100%)`,
+      glow: I > 0.4 ? `0 0 ${Math.round(20 * I)}px rgba(38,166,154,${(0.25 + 0.25*I).toFixed(2)})` : "none",
+      border: `rgba(38,166,154,${(0.15 + 0.35*I).toFixed(2)})`,
+      text: "#a7f3d0",
+    };
+  } else if (clamped <= -0.3) {
+    const r = Math.round(50 + 110 * I);
+    const g = Math.round(14 + 6 * I);
+    const b = Math.round(14 + 6 * I);
+    return {
+      bg: `linear-gradient(135deg, rgb(${Math.max(0,r-8)},${g},${b}) 0%, rgb(${Math.min(255,r+15)},${g+5},${b+5}) 100%)`,
+      glow: I > 0.4 ? `0 0 ${Math.round(20 * I)}px rgba(239,83,80,${(0.25 + 0.25*I).toFixed(2)})` : "none",
+      border: `rgba(239,83,80,${(0.15 + 0.35*I).toFixed(2)})`,
+      text: "#fca5a5",
+    };
+  }
+  return {
+    bg: "linear-gradient(135deg, #161a26 0%, #1c2030 100%)",
+    glow: "none",
+    border: "rgba(255,255,255,0.05)",
+    text: "#8892a4",
+  };
 }
 
-function fmtPct(v: number) { return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`; }
-function fmtPr(p: number): string {
+/* ────────────────────────────────────────────────────────────────────────────
+ * Formatters
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+function fmtPct(v: number): string { return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`; }
+function fmtPrice(p: number): string {
   if (p >= 1000) return `$${p.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
   if (p >= 1)    return `$${p.toFixed(2)}`;
-  if (p >= 0.001)return `$${p.toFixed(4)}`;
-  return `$${p.toFixed(8)}`;
+  if (p >= 0.01) return `$${p.toFixed(4)}`;
+  if (p >= 0.0001) return `$${p.toFixed(6)}`;
+  return `$${p.toExponential(2)}`;
 }
-function fmtMcap(v: number): string {
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}T`;
-  if (v >= 1)     return `$${v.toFixed(0)}B`;
-  return `$${(v * 1000).toFixed(0)}M`;
+function fmtBig(v: number): string {
+  if (v >= 1e12) return `$${(v/1e12).toFixed(2)}T`;
+  if (v >= 1e9)  return `$${(v/1e9).toFixed(2)}B`;
+  if (v >= 1e6)  return `$${(v/1e6).toFixed(2)}M`;
+  if (v >= 1e3)  return `$${(v/1e3).toFixed(2)}K`;
+  return `$${v.toFixed(0)}`;
 }
 
-/* ── Tooltip ──────────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────────
+ * AI score — deterministic synthesis from real market data
+ * ──────────────────────────────────────────────────────────────────────────── */
 
-function Tooltip({ coin, x, y, containerW }: { coin: HeatCoin; x: number; y: number; containerW: number }) {
-  const flipX = x > containerW - 200;
+function aiScore(c: CoinMarket): number {
+  const vol = c.total_volume || 0;
+  const mcap = c.market_cap || 1;
+  const volRatio = Math.min(2, vol / mcap);
+  const ch24 = c.price_change_percentage_24h || 0;
+  const ch7d = c.price_change_percentage_7d_in_currency ?? ch24;
+  // Score 0-100: blends momentum, volume/mcap ratio, and sustained trend
+  const momentum = Math.max(-1, Math.min(1, (ch24 + ch7d / 2) / 20));
+  const liquidity = Math.min(1, volRatio);
+  return Math.round(50 + 35 * momentum + 15 * liquidity);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Mini sparkline (inline SVG, GPU-friendly)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+function Sparkline({ points, color, w, h }: { points: number[]; color: string; w: number; h: number }) {
+  if (!points || points.length < 2) return null;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const step = w / (points.length - 1);
+  const path = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${(i * step).toFixed(1)} ${(h - ((p - min) / range) * h).toFixed(1)}`)
+    .join(" ");
   return (
-    <div
-      className="pointer-events-none absolute z-50 rounded-xl p-3 w-44"
+    <svg width={w} height={h} className="absolute bottom-1 right-1 opacity-70 pointer-events-none">
+      <path d={path} fill="none" stroke={color} strokeWidth={1.2} />
+    </svg>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Tile
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const Tile = React.memo(function Tile({
+  tile, onHover, onClick,
+}: {
+  tile: TileOut;
+  onHover: (t: TileOut | null, x: number, y: number) => void;
+  onClick: (c: CoinMarket) => void;
+}) {
+  const { coin, x, y, w, h, pct } = tile;
+  const vis = tileVisuals(pct);
+
+  const area = w * h;
+  const showFull   = area > 7000;
+  const showMid    = area > 3000;
+  const showSym    = area > 1200;
+
+  const fontSym  = Math.max(10, Math.min(22, Math.sqrt(area) / 8));
+  const fontPct  = Math.max(8,  Math.min(15, Math.sqrt(area) / 11));
+  const fontName = Math.max(7,  Math.min(11, Math.sqrt(area) / 16));
+
+  const sparkColor = pct >= 0 ? "#26a69a" : "#ef5350";
+  const sparkW = Math.min(w - 8, 60);
+  const sparkH = Math.min(h - 30, 22);
+
+  return (
+    <motion.div
+      layout
+      initial={false}
+      animate={{ x, y, width: w, height: h }}
+      transition={{ type: "spring", stiffness: 180, damping: 26, mass: 0.7 }}
+      className="absolute cursor-pointer overflow-hidden"
       style={{
-        left: flipX ? x - 180 : x + 8,
-        top: Math.max(0, y - 10),
-        background: "rgba(8,12,22,0.97)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        background: vis.bg,
+        border: `1px solid ${vis.border}`,
+        borderRadius: Math.min(8, Math.max(3, Math.sqrt(area) / 22)),
+        boxShadow: vis.glow,
+        padding: showFull ? 8 : showMid ? 5 : 3,
+      }}
+      whileHover={{ scale: 1.025, zIndex: 20, boxShadow: `${vis.glow}, 0 8px 24px rgba(0,0,0,0.5)` }}
+      onMouseEnter={(e) => onHover(tile, e.clientX, e.clientY)}
+      onMouseMove={(e) => onHover(tile, e.clientX, e.clientY)}
+      onMouseLeave={() => onHover(null, 0, 0)}
+      onClick={() => onClick(coin)}
+      data-testid={`tile-${coin.symbol}`}
+    >
+      {/* Glass overlay */}
+      <div className="absolute inset-0 pointer-events-none"
+        style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0.08) 100%)" }} />
+
+      {showSym && (
+        <div className="relative flex items-start justify-between gap-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {showFull && coin.image && (
+              <img src={coin.image} alt="" className="rounded-full flex-shrink-0"
+                width={Math.min(18, Math.sqrt(area)/10)} height={Math.min(18, Math.sqrt(area)/10)}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                loading="lazy" />
+            )}
+            <div className="font-black text-white truncate leading-none tracking-tight"
+              style={{ fontSize: fontSym, textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}>
+              {coin.symbol.toUpperCase()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMid && (
+        <div className="relative mt-1">
+          <div className="font-mono font-black leading-tight" style={{ fontSize: fontPct, color: vis.text }}>
+            {fmtPct(pct)}
+          </div>
+          {showFull && (
+            <div className="font-mono mt-0.5 truncate text-white/80" style={{ fontSize: fontName }}>
+              {fmtPrice(coin.current_price)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showFull && coin.sparkline_in_7d?.price && sparkW > 20 && sparkH > 10 && (
+        <Sparkline points={coin.sparkline_in_7d.price.slice(-30)} color={sparkColor} w={sparkW} h={sparkH} />
+      )}
+    </motion.div>
+  );
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Hover tooltip
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+function HoverCard({ tile, x, y, viewportW, viewportH }: { tile: TileOut; x: number; y: number; viewportW: number; viewportH: number }) {
+  const { coin, pct } = tile;
+  const sector = sectorOf(coin);
+  const sm = SECTOR_META[sector];
+  const ai = aiScore(coin);
+
+  const TIP_W = 240, TIP_H = 220, PAD = 8;
+  // Clamp horizontally: flip to the left if too close to right edge, but never go off-left
+  const rawLeft = x > viewportW - TIP_W - 20 ? x - TIP_W - 10 : x + 14;
+  const left    = Math.max(PAD, Math.min(rawLeft, viewportW - TIP_W - PAD));
+  // Clamp vertically: keep tooltip within viewport top/bottom
+  const top     = Math.max(PAD, Math.min(y - 20, viewportH - TIP_H - PAD));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      transition={{ duration: 0.12 }}
+      className="fixed pointer-events-none z-50 rounded-xl p-3 w-[240px] backdrop-blur-xl"
+      style={{
+        left,
+        top,
+        background: "rgba(8,12,22,0.92)",
+        border: "1px solid rgba(77,127,255,0.25)",
+        boxShadow: "0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)",
       }}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <img src={coin.image} alt={coin.symbol} className="w-6 h-6 rounded-full"
-          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-        <div>
-          <div className="text-[11px] font-black text-white">{coin.symbol}</div>
-          <div className="text-[8px]" style={{ color: "#4a5068" }}>{coin.name}</div>
+      <div className="flex items-center gap-2 mb-2.5 pb-2 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        {coin.image && <img src={coin.image} alt="" className="w-7 h-7 rounded-full" />}
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px] font-black text-white truncate">{coin.symbol.toUpperCase()}</div>
+          <div className="text-[9px] truncate" style={{ color: "#5a6072" }}>{coin.name}</div>
+        </div>
+        <div className="text-right">
+          <div className="font-mono font-black text-[12px]" style={{ color: pct >= 0 ? "#26a69a" : "#ef5350" }}>
+            {fmtPct(pct)}
+          </div>
         </div>
       </div>
-      <div className="space-y-1 text-[10px]">
-        <div className="flex justify-between">
-          <span style={{ color: "#5a6072" }}>Price</span>
-          <span className="font-black text-white font-mono">{fmtPr(coin.price)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span style={{ color: "#5a6072" }}>24h</span>
-          <span className="font-black font-mono" style={{ color: heatText(coin.ch24) }}>{fmtPct(coin.ch24)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span style={{ color: "#5a6072" }}>7d</span>
-          <span className="font-black font-mono" style={{ color: heatText(coin.ch7d) }}>{fmtPct(coin.ch7d)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span style={{ color: "#5a6072" }}>Mcap</span>
-          <span className="font-bold font-mono" style={{ color: "#8892a4" }}>{fmtMcap(coin.mcap)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span style={{ color: "#5a6072" }}>Sector</span>
-          <span className="font-bold" style={{ color: SECTOR_META[coin.sector]?.color ?? "#fff" }}>{coin.sector}</span>
-        </div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[10px]">
+        <Row k="Price"  v={fmtPrice(coin.current_price)} />
+        <Row k="Rank"   v={`#${coin.market_cap_rank ?? "—"}`} />
+        <Row k="Mcap"   v={fmtBig(coin.market_cap)} />
+        <Row k="Vol"    v={fmtBig(coin.total_volume)} />
+        <Row k="24h"    v={fmtPct(coin.price_change_percentage_24h ?? 0)} mono />
+        <Row k="7d"     v={fmtPct(coin.price_change_percentage_7d_in_currency ?? 0)} mono />
       </div>
+      <div className="mt-2.5 pt-2 border-t flex items-center justify-between"
+        style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+          style={{ background: `${sm.color}22`, color: sm.color, border: `1px solid ${sm.color}33` }}>
+          {sector}
+        </span>
+        <span className="text-[9px] font-bold" style={{ color: ai >= 70 ? "#26a69a" : ai >= 40 ? "#8892a4" : "#ef5350" }}>
+          AI {ai}
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
+function Row({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span style={{ color: "#5a6072" }}>{k}</span>
+      <span className={`font-bold text-white/90 ${mono ? "font-mono" : ""}`}>{v}</span>
     </div>
   );
 }
 
-/* ── Main Component ─────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────────
+ * Main Heatmap Component
+ * ──────────────────────────────────────────────────────────────────────────── */
 
 export default function Heatmap() {
-  const [, setLocation]           = useLocation();
-  const [view, setView]           = useState<TimeView>("24h");
-  const [sectorFilter, setSector] = useState<string>("All");
-  const [hovered, setHovered]     = useState<{ coin: HeatCoin; x: number; y: number } | null>(null);
-  const containerRef              = useRef<HTMLDivElement>(null);
-  const [cWidth, setCWidth]       = useState(1100);
+  const [, setLocation] = useLocation();
+  const { coins, progress, lastRefreshedAt } = useAllCoins();
 
-  const { data: liveCoins, dataUpdatedAt, refetch } = useLiveCoins();
+  const [sizeMode,    setSizeMode]    = useState<SizeMode>("mcap");
+  const [viewMode,    setViewMode]    = useState<ViewMode>("24h");
+  const [sector,      setSector]      = useState<string>("All");
+  const [countMode,   setCountMode]   = useState<CountMode>(200);
+  const [hover, setHover] = useState<{ tile: TileOut; x: number; y: number } | null>(null);
+  const hoverRafRef = useRef<number | null>(null);
+  const pendingHoverRef = useRef<{ tile: TileOut; x: number; y: number } | null>(null);
 
-  /* Observe container width */
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [viewportH, setViewportH] = useState(typeof window !== "undefined" ? window.innerHeight : 800);
+  const [viewportW, setViewportW] = useState(typeof window !== "undefined" ? window.innerWidth  : 1200);
+  useEffect(() => {
+    const onResize = () => { setViewportW(window.innerWidth); setViewportH(window.innerHeight); };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const [{ w: cW, h: cH }, setSize] = useState({ w: 1200, h: 720 });
+
   useEffect(() => {
     if (!containerRef.current) return;
-    const ro = new ResizeObserver(([e]) => setCWidth(e.contentRect.width));
+    const ro = new ResizeObserver(([e]) => setSize({ w: e.contentRect.width, h: Math.max(560, e.contentRect.height) }));
     ro.observe(containerRef.current);
     return () => ro.disconnect();
   }, []);
 
-  /* Merge live data with static fallback */
-  const allCoins: HeatCoin[] = useMemo(() => {
-    if (!liveCoins?.length) return STATIC_COINS;
-    const liveMap = new Map(liveCoins.map((c: LiveCoin) => [c.id, c]));
-    return STATIC_COINS.map(fb => {
-      const live = liveMap.get(fb.id);
-      if (!live) return fb;
-      return {
-        ...fb,
-        price: live.current_price,
-        ch24:  live.price_change_percentage_24h,
-        ch7d:  live.price_change_percentage_7d_in_currency ?? fb.ch7d,
-        mcap:  live.market_cap / 1_000_000, // keep in millions for relative sizing
-        image: live.image,
-        name:  live.name,
-        symbol: live.symbol.toUpperCase(),
-      };
+  /* ── Resolve change % for the active time view ──────────────────────────── */
+  const pctOf = (c: CoinMarket): number => {
+    if (viewMode === "1h") return c.price_change_percentage_1h_in_currency ?? 0;
+    if (viewMode === "7d") return c.price_change_percentage_7d_in_currency ?? 0;
+    return c.price_change_percentage_24h ?? 0;
+  };
+
+  /* ── Filtered universe ──────────────────────────────────────────────────── */
+  const universe = useMemo<CoinMarket[]>(() => {
+    if (!coins.length) return [];
+    let pool = coins.filter(c => c.market_cap > 0);
+
+    if (sector === "Trending") {
+      pool = [...pool].sort((a, b) =>
+        Math.abs(b.price_change_percentage_24h ?? 0) - Math.abs(a.price_change_percentage_24h ?? 0)
+      );
+    } else if (sector !== "All") {
+      pool = pool.filter(c => sectorOf(c) === sector);
+    }
+
+    return pool.slice(0, countMode);
+  }, [coins, sector, countMode]);
+
+  /* ── Treemap input by sizing mode ───────────────────────────────────────── */
+  const treemap = useMemo<TileOut[]>(() => {
+    if (universe.length === 0 || cW < 100 || cH < 100) return [];
+
+    const items: TileIn[] = universe.map(c => {
+      let v = 0;
+      if (sizeMode === "mcap")          v = c.market_cap;
+      else if (sizeMode === "volume")   v = c.total_volume;
+      else if (sizeMode === "volatility") v = Math.abs(c.price_change_percentage_24h ?? 0) * (c.market_cap || 1) / 1e8;
+      else if (sizeMode === "ai_score") v = aiScore(c) * Math.sqrt(c.market_cap || 1);
+      return { id: c.id, value: Math.max(1, v), coin: c, pct: pctOf(c) };
     });
-  }, [liveCoins]);
 
-  const getVal = (c: HeatCoin) =>
-    view === "7d" || view === "30d" ? c.ch7d : c.ch24;
+    // Sort largest first for stable squarified layout
+    items.sort((a, b) => b.value - a.value);
+    return buildTreemap(items, 0, 0, cW, cH);
+  }, [universe, sizeMode, viewMode, cW, cH]);
 
-  const sectors = useMemo(() => {
-    const map = new Map<string, HeatCoin[]>();
-    allCoins.forEach(c => {
-      if (!map.has(c.sector)) map.set(c.sector, []);
-      map.get(c.sector)!.push(c);
+  /* ── Top analytics ──────────────────────────────────────────────────────── */
+  const stats = useMemo(() => {
+    if (coins.length === 0) {
+      return { totalMcap: 0, totalVol: 0, gainers: 0, losers: 0, btcDom: 0, topSector: "—" as string, topSectorPct: 0 };
+    }
+    const totalMcap = coins.reduce((s, c) => s + (c.market_cap || 0), 0);
+    const totalVol  = coins.reduce((s, c) => s + (c.total_volume || 0), 0);
+    const btcMcap   = coins.find(c => c.id === "bitcoin")?.market_cap ?? 0;
+    const btcDom    = totalMcap > 0 ? (btcMcap / totalMcap) * 100 : 0;
+
+    const top500 = coins.slice(0, 500);
+    const gainers = top500.filter(c => (c.price_change_percentage_24h ?? 0) > 0).length;
+    const losers  = top500.filter(c => (c.price_change_percentage_24h ?? 0) < 0).length;
+
+    // Strongest sector by avg 24h pct
+    const sectorScores = new Map<string, { sum: number; n: number }>();
+    for (const c of top500) {
+      const s = sectorOf(c);
+      if (s === "Other" || s === "Stables") continue;
+      const cur = sectorScores.get(s) ?? { sum: 0, n: 0 };
+      cur.sum += c.price_change_percentage_24h ?? 0; cur.n++;
+      sectorScores.set(s, cur);
+    }
+    let topSector = "—", topSectorPct = -Infinity;
+    sectorScores.forEach((v, k) => {
+      const avg = v.sum / v.n;
+      if (avg > topSectorPct) { topSectorPct = avg; topSector = k; }
     });
-    return Array.from(map.entries())
-      .sort((a, b) => (SECTOR_META[a[0]]?.order ?? 99) - (SECTOR_META[b[0]]?.order ?? 99));
-  }, [allCoins]);
 
-  const filteredCoins = useMemo(() => {
-    return sectorFilter === "All" ? allCoins : allCoins.filter(c => c.sector === sectorFilter);
-  }, [allCoins, sectorFilter]);
+    return { totalMcap, totalVol, gainers, losers, btcDom, topSector, topSectorPct: topSectorPct === -Infinity ? 0 : topSectorPct };
+  }, [coins]);
 
-  /* ── Build full treemap ─── */
-  const HEATMAP_H = 540;
-  const tiles = useMemo(() => {
-    const items = [...filteredCoins]
-      .filter(c => c.mcap > 0)
-      .sort((a, b) => b.mcap - a.mcap)
-      .map(c => ({ id: c.id, value: c.mcap, data: c }));
-    return buildTreemap(items, 0, 0, cWidth, HEATMAP_H);
-  }, [filteredCoins, cWidth, HEATMAP_H]);
+  // rAF-throttled hover — coalesces 60+ pointer events into one render per frame
+  const onHover = useCallback((t: TileOut | null, x: number, y: number) => {
+    if (!t) {
+      pendingHoverRef.current = null;
+      if (hoverRafRef.current != null) { cancelAnimationFrame(hoverRafRef.current); hoverRafRef.current = null; }
+      setHover(null);
+      return;
+    }
+    pendingHoverRef.current = { tile: t, x, y };
+    if (hoverRafRef.current != null) return;
+    hoverRafRef.current = requestAnimationFrame(() => {
+      hoverRafRef.current = null;
+      const p = pendingHoverRef.current;
+      if (p) setHover(p);
+    });
+  }, []);
+  useEffect(() => () => {
+    if (hoverRafRef.current != null) cancelAnimationFrame(hoverRafRef.current);
+  }, []);
 
-  /* ── Sector stats ─── */
-  const sectorStats = useMemo(() => sectors.map(([name, coins]) => {
-    const avg = coins.reduce((s, c) => s + getVal(c), 0) / coins.length;
-    const mcap = coins.reduce((s, c) => s + c.mcap, 0);
-    return { name, avg, mcap, coins: coins.length, color: SECTOR_META[name]?.color ?? "#5a6072" };
-  }), [sectors, view]);
+  const onClick = useCallback((c: CoinMarket) => {
+    setLocation(`/research/${c.symbol.toLowerCase()}`);
+  }, [setLocation]);
 
-  const topGainers = useMemo(() =>
-    [...allCoins].sort((a, b) => getVal(b) - getVal(a)).slice(0, 6),
-  [allCoins, view]);
-  const topLosers = useMemo(() =>
-    [...allCoins].sort((a, b) => getVal(a) - getVal(b)).slice(0, 6),
-  [allCoins, view]);
-
-  const updatedAt = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : null;
+  const liveDot = lastRefreshedAt && Date.now() - lastRefreshedAt < 60_000;
 
   return (
-    <div className="space-y-4 pb-8">
-
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#2962ff,#10b981)", boxShadow: "0 0 20px rgba(41,98,255,0.35)" }}>
-              <LayoutGrid size={18} className="text-white" />
-            </div>
-            <h1 className="text-[22px] font-black tracking-tight"
-              style={{ background: "linear-gradient(130deg,#fff 0%,#a5f3fc 50%,#2962ff 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              Market Heatmap
-            </h1>
-            {updatedAt && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black"
-                style={{ background: "rgba(38,166,154,0.15)", border: "1px solid rgba(38,166,154,0.3)", color: "#26a69a" }}>
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> LIVE
+    <div className="min-h-screen text-white" style={{ background: "#070a12" }}>
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6">
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: "linear-gradient(135deg, #2962ff, #4d7fff)", boxShadow: "0 4px 16px rgba(77,127,255,0.3)" }}>
+                <LayoutGrid size={15} className="text-white" />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Market Heatmap</h1>
+              <span className="px-2 py-0.5 rounded text-[9px] font-black tracking-widest uppercase"
+                style={{ background: "rgba(77,127,255,0.15)", color: "#4d7fff", border: "1px solid rgba(77,127,255,0.3)" }}>
+                Institutional
               </span>
+            </div>
+            <p className="text-[12px] font-medium" style={{ color: "#5a6072" }}>
+              {coins.length.toLocaleString()} coins indexed · {universe.length} on canvas · auto-refresh 30s
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {progress.totalCoins > 0 && progress.pagesLoaded < progress.totalPages && (
+              <div className="text-[10px] font-mono" style={{ color: "#5a6072" }}>
+                Syncing {progress.totalCoins.toLocaleString()} / {(progress.totalPages * 250).toLocaleString()}
+              </div>
             )}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+              style={{ background: "rgba(13,17,26,0.6)", border: "1px solid rgba(38,166,154,0.25)" }}>
+              <span className={`w-1.5 h-1.5 rounded-full ${liveDot ? "animate-pulse" : ""}`}
+                style={{ background: liveDot ? "#26a69a" : "#5a6072" }} />
+              <span className="text-[10px] font-black tracking-wider uppercase" style={{ color: liveDot ? "#26a69a" : "#5a6072" }}>
+                {liveDot ? "Live" : "Stale"}
+              </span>
+            </div>
           </div>
-          <p className="text-[11px]" style={{ color: "#4a5068" }}>
-            {allCoins.length} coins · Block size = market cap · Color = performance · {updatedAt ? `Updated ${updatedAt}` : "Fallback data"}
-          </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Time selector */}
-          <div className="flex items-center p-0.5 rounded-xl gap-0.5"
-            style={{ background: "rgba(10,14,22,0.9)", border: "1px solid rgba(255,255,255,0.06)" }}>
-            {(["24h","7d"] as TimeView[]).map(v => (
-              <button key={v} onClick={() => setView(v)}
-                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
-                style={{
-                  background: view === v ? "rgba(41,98,255,0.25)" : "transparent",
-                  color: view === v ? "#4d7fff" : "#5a6072",
-                  border: view === v ? "1px solid rgba(41,98,255,0.4)" : "1px solid transparent",
-                }}>{v}</button>
-            ))}
+
+        {/* ── Top analytics strip ─────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
+          <StatCard k="Market Cap" v={fmtBig(stats.totalMcap)} accent="#4d7fff" />
+          <StatCard k="Volume 24h" v={fmtBig(stats.totalVol)} accent="#a78bfa" />
+          <StatCard k="Gainers"    v={`${stats.gainers}`} sub="top 500" accent="#26a69a" />
+          <StatCard k="Losers"     v={`${stats.losers}`}  sub="top 500" accent="#ef5350" />
+          <StatCard k="BTC Dom"    v={`${stats.btcDom.toFixed(1)}%`} accent="#f7931a" />
+          <StatCard k="Hot Sector" v={stats.topSector}
+            sub={stats.topSectorPct ? `${fmtPct(stats.topSectorPct)} avg` : undefined}
+            accent={SECTOR_META[stats.topSector]?.color ?? "#4d7fff"} />
+        </div>
+
+        {/* ── Control bar ─────────────────────────────────────────────────── */}
+        <div className="rounded-2xl p-3 mb-3"
+          style={{ background: "rgba(13,17,26,0.6)", border: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(12px)" }}>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Size mode */}
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] font-black tracking-widest uppercase mr-1" style={{ color: "#5a6072" }}>Size</span>
+              {SIZE_MODES.map(sm => {
+                const Icon = sm.icon;
+                const active = sizeMode === sm.id;
+                return (
+                  <button key={sm.id} onClick={() => setSizeMode(sm.id)}
+                    data-testid={`size-${sm.id}`}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
+                    style={{
+                      background: active ? "rgba(77,127,255,0.18)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${active ? "rgba(77,127,255,0.45)" : "rgba(255,255,255,0.05)"}`,
+                      color: active ? "#4d7fff" : "#8892a4",
+                    }}>
+                    <Icon size={11} /> {sm.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="w-px h-6" style={{ background: "rgba(255,255,255,0.06)" }} />
+
+            {/* View mode */}
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] font-black tracking-widest uppercase mr-1" style={{ color: "#5a6072" }}>Window</span>
+              {(["1h", "24h", "7d"] as ViewMode[]).map(v => {
+                const active = viewMode === v;
+                return (
+                  <button key={v} onClick={() => setViewMode(v)}
+                    data-testid={`view-${v}`}
+                    className="px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-all"
+                    style={{
+                      background: active ? "rgba(38,166,154,0.18)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${active ? "rgba(38,166,154,0.45)" : "rgba(255,255,255,0.05)"}`,
+                      color: active ? "#26a69a" : "#8892a4",
+                    }}>
+                    {v.toUpperCase()}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="w-px h-6" style={{ background: "rgba(255,255,255,0.06)" }} />
+
+            {/* Count */}
+            <div className="flex items-center gap-1 ml-auto">
+              <span className="text-[9px] font-black tracking-widest uppercase mr-1" style={{ color: "#5a6072" }}>Coins</span>
+              {([50, 100, 200, 500] as CountMode[]).map(n => {
+                const active = countMode === n;
+                return (
+                  <button key={n} onClick={() => setCountMode(n)}
+                    data-testid={`count-${n}`}
+                    className="px-2 py-1.5 rounded-lg text-[10px] font-black font-mono transition-all"
+                    style={{
+                      background: active ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${active ? "rgba(167,139,250,0.45)" : "rgba(255,255,255,0.05)"}`,
+                      color: active ? "#a78bfa" : "#8892a4",
+                    }}>
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <button onClick={() => refetch()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all"
-            style={{ background: "rgba(41,98,255,0.1)", border: "1px solid rgba(41,98,255,0.2)", color: "#4d7fff" }}>
-            <RefreshCw size={12} /> Refresh
-          </button>
+
+          {/* Sector pills */}
+          <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+            <span className="text-[9px] font-black tracking-widest uppercase mr-1" style={{ color: "#5a6072" }}>Sector</span>
+            {SECTORS_ORDER.map(s => {
+              const meta = s === "All" || s === "Trending" ? null : SECTOR_META[s];
+              const accent = s === "Trending" ? "#f59e0b" : meta?.color ?? "#4d7fff";
+              const active = sector === s;
+              const Icon = s === "Trending" ? Flame : meta?.icon;
+              return (
+                <button key={s} onClick={() => setSector(s)}
+                  data-testid={`sector-${s}`}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all"
+                  style={{
+                    background: active ? `${accent}22` : "rgba(255,255,255,0.02)",
+                    border: `1px solid ${active ? `${accent}66` : "rgba(255,255,255,0.05)"}`,
+                    color: active ? accent : "#8892a4",
+                  }}>
+                  {Icon && <Icon size={10} />} {s}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
-      {/* ── Sector filter bar ── */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {["All", ...sectors.map(([n]) => n)].map(s => {
-          const meta = SECTOR_META[s];
-          const isActive = sectorFilter === s;
-          return (
-            <button key={s} onClick={() => setSector(s)}
-              className="px-2.5 py-1 rounded-xl text-[10px] font-semibold transition-all"
-              style={{
-                background: isActive ? `${meta?.color ?? "#2962ff"}20` : "rgba(255,255,255,0.04)",
-                color: isActive ? (meta?.color ?? "#4d7fff") : "#5a6072",
-                border: isActive ? `1px solid ${meta?.color ?? "#2962ff"}40` : "1px solid rgba(255,255,255,0.06)",
-              }}>{s}</button>
-          );
-        })}
-      </div>
+        {/* ── Heatmap canvas ──────────────────────────────────────────────── */}
+        <div
+          ref={containerRef}
+          className="relative rounded-2xl overflow-hidden"
+          style={{
+            width: "100%",
+            height: "min(78vh, 820px)",
+            background: "linear-gradient(180deg, #0a0e18 0%, #050810 100%)",
+            border: "1px solid rgba(255,255,255,0.05)",
+            boxShadow: "inset 0 0 40px rgba(0,0,0,0.5)",
+          }}
+        >
+          {treemap.length === 0 && coins.length === 0 && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
+                <Activity size={28} className="text-[#4d7fff]" />
+              </motion.div>
+              <p className="text-[12px] font-bold" style={{ color: "#5a6072" }}>Loading market data…</p>
+            </div>
+          )}
+          {treemap.length === 0 && coins.length > 0 && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <TrendingDown size={28} className="text-[#5a6072]" />
+              <p className="text-[12px] font-bold" style={{ color: "#5a6072" }}>
+                No coins match this sector yet
+              </p>
+            </div>
+          )}
 
-      {/* ── Color legend ── */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-0.5">
-          {["#0b3d2e","#156b52","#1a8066","#3d1212","#782222","#962a2a"].map((c, i) => (
-            <div key={i} className="w-10 h-3.5 first:rounded-l-full last:rounded-r-full" style={{ background: c }} />
+          {treemap.map(t => (
+            <Tile key={t.id} tile={t} onHover={onHover} onClick={onClick} />
           ))}
         </div>
-        <div className="flex items-center gap-4 text-[10px]">
-          <div className="flex items-center gap-1">
-            <TrendingUp size={11} style={{ color: "#26a69a" }} />
-            <span style={{ color: "#26a69a" }}>Gaining</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <TrendingDown size={11} style={{ color: "#ef5350" }} />
-            <span style={{ color: "#ef5350" }}>Losing</span>
-          </div>
-          <span style={{ color: "#3a4058" }}>Block size = market cap</span>
-        </div>
-      </div>
 
-      {/* ── Treemap Canvas ── */}
-      <div
-        ref={containerRef}
-        className="rounded-2xl overflow-hidden relative"
-        style={{
-          background: "rgba(6,9,16,0.98)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          height: HEATMAP_H,
-          boxShadow: "0 4px 40px rgba(0,0,0,0.4)",
-        }}
-        onMouseLeave={() => setHovered(null)}
-      >
-        {tiles.map(tile => {
-          const coin = tile.data;
-          const val   = getVal(coin);
-          const isHov = hovered?.coin.id === coin.id;
+        {/* ── Legend / AI overlay ─────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+          <InfoCard title="Color Engine" icon={Activity}>
+            <div className="flex items-center gap-1.5">
+              {[-10, -5, -1, 0, 1, 5, 10].map(p => {
+                const v = tileVisuals(p);
+                return <div key={p} className="flex-1 h-5 rounded" style={{ background: v.bg, border: `1px solid ${v.border}` }} />;
+              })}
+            </div>
+            <div className="flex items-center justify-between text-[9px] font-mono mt-1" style={{ color: "#5a6072" }}>
+              <span>-10%</span><span>0%</span><span>+10%</span>
+            </div>
+          </InfoCard>
 
-          /* Size thresholds */
-          const showImg   = tile.w >= 44 && tile.h >= 44;
-          const showName  = tile.w >= 52 && tile.h >= 40;
-          const showPct   = tile.w >= 36 && tile.h >= 30;
-          const showPrice = tile.w >= 72 && tile.h >= 60;
-          const bigText   = tile.w >= 100 && tile.h >= 70;
-
-          return (
-            <motion.div
-              key={coin.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.18 }}
-              onClick={() => setLocation(`/research/${coin.symbol.toUpperCase()}`)}
-              onMouseEnter={e => {
-                const rect = containerRef.current?.getBoundingClientRect();
-                if (rect) setHovered({ coin, x: e.clientX - rect.left, y: e.clientY - rect.top });
-              }}
-              onMouseMove={e => {
-                const rect = containerRef.current?.getBoundingClientRect();
-                if (rect) setHovered({ coin, x: e.clientX - rect.left, y: e.clientY - rect.top });
-              }}
-              style={{
-                position: "absolute",
-                left:   tile.x + 1,
-                top:    tile.y + 1,
-                width:  Math.max(0, tile.w - 2),
-                height: Math.max(0, tile.h - 2),
-                background: heatBg(val),
-                border: `1px solid ${heatBorder(val)}`,
-                borderRadius: 6,
-                cursor: "pointer",
-                transition: "filter 0.12s",
-                filter: isHov ? "brightness(1.35)" : "brightness(1)",
-                overflow: "hidden",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 2,
-              }}
-            >
-              {showImg && (
-                <img
-                  src={coin.image}
-                  alt={coin.symbol}
-                  style={{
-                    width:  bigText ? 28 : 18,
-                    height: bigText ? 28 : 18,
-                    borderRadius: "50%",
-                    objectFit: "cover",
-                  }}
-                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                />
-              )}
-              {showName && (
-                <div style={{
-                  fontSize: bigText ? 13 : 10,
-                  fontWeight: 900,
-                  color: "#fff",
-                  lineHeight: 1,
-                  letterSpacing: bigText ? 0.3 : 0,
-                  textAlign: "center",
-                  padding: "0 4px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  maxWidth: "100%",
-                }}>
-                  {coin.symbol}
-                </div>
-              )}
-              {showPrice && (
-                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.6)", fontFamily: "monospace", textAlign: "center" }}>
-                  {fmtPr(coin.price)}
-                </div>
-              )}
-              {showPct && (
-                <div style={{
-                  fontSize: bigText ? 11 : 9,
-                  fontWeight: 700,
-                  color: heatText(val),
-                  fontFamily: "monospace",
-                  textAlign: "center",
-                }}>
-                  {fmtPct(val)}
-                </div>
-              )}
-              {!showName && tile.w >= 18 && tile.h >= 14 && (
-                <div style={{ fontSize: 7, fontWeight: 900, color: "rgba(255,255,255,0.7)", textAlign: "center" }}>
-                  {coin.symbol.slice(0, 3)}
-                </div>
-              )}
-            </motion.div>
-          );
-        })}
-
-        {/* Tooltip */}
-        {hovered && (
-          <Tooltip
-            coin={hovered.coin}
-            x={hovered.x}
-            y={hovered.y}
-            containerW={cWidth}
-          />
-        )}
-      </div>
-
-      {/* ── Bottom panels: Sector stats + Top Movers ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* Sector rotation */}
-        <div className="lg:col-span-2 rounded-2xl p-4"
-          style={{ background: "rgba(13,17,26,0.90)", border: "1px solid rgba(255,255,255,0.06)" }}>
-          <div className="flex items-center gap-2 mb-4">
-            <Activity size={13} style={{ color: "#2962ff" }} />
-            <span className="text-[12px] font-black text-white">Sector Rotation ({view})</span>
-          </div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-            {sectorStats.filter(s => s.name !== "Stables").map((s, i) => (
-              <div key={s.name}>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full" style={{ background: s.color }} />
-                    <span className="text-[10px] font-semibold text-white">{s.name}</span>
-                    <span className="text-[8px]" style={{ color: "#3a4058" }}>{s.coins} coins</span>
+          <InfoCard title="Sector Strength" icon={Layers}>
+            <div className="space-y-1">
+              {Object.entries(SECTOR_META).slice(0, 5).map(([name, meta]) => {
+                const Icon = meta.icon;
+                return (
+                  <div key={name} className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="flex items-center gap-1.5" style={{ color: meta.color }}>
+                      <Icon size={10} /> <span className="font-bold">{name}</span>
+                    </span>
+                    <span className="font-mono font-bold" style={{ color: "#8892a4" }}>
+                      {coins.filter(c => sectorOf(c) === name).length}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-black font-mono"
-                    style={{ color: s.avg >= 0 ? "#26a69a" : "#ef5350" }}>
-                    {s.avg >= 0 ? "+" : ""}{s.avg.toFixed(2)}%
-                  </span>
-                </div>
-                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
-                  <motion.div className="h-full rounded-full"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, Math.abs(s.avg) * 8)}%` }}
-                    transition={{ duration: 0.7, delay: i * 0.05 }}
-                    style={{ background: s.avg >= 0 ? s.color : "#ef5350" }} />
-                </div>
+                );
+              })}
+            </div>
+          </InfoCard>
+
+          <InfoCard title="AI Signals" icon={Sparkles}>
+            <div className="space-y-1.5 text-[10px]">
+              <div className="flex items-center justify-between">
+                <span style={{ color: "#5a6072" }}>Hottest sector</span>
+                <span className="font-black" style={{ color: SECTOR_META[stats.topSector]?.color ?? "#fff" }}>
+                  {stats.topSector} {fmtPct(stats.topSectorPct)}
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Top movers */}
-        <div className="rounded-2xl p-4"
-          style={{ background: "rgba(13,17,26,0.90)", border: "1px solid rgba(255,255,255,0.06)" }}>
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp size={13} style={{ color: "#26a69a" }} />
-            <span className="text-[12px] font-black text-white">Top Movers ({view})</span>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-[8px] font-black uppercase tracking-wider mb-2" style={{ color: "#26a69a" }}>🚀 Gainers</div>
-              {topGainers.map(c => (
-                <div key={c.id} className="flex items-center justify-between py-1 border-b" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-                  <div className="flex items-center gap-1.5">
-                    <img src={c.image} alt={c.symbol} className="w-4 h-4 rounded-full"
-                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-                    <span className="text-[10px] font-black text-white">{c.symbol}</span>
-                  </div>
-                  <span className="text-[9px] font-black font-mono" style={{ color: "#26a69a" }}>+{getVal(c).toFixed(1)}%</span>
-                </div>
-              ))}
+              <div className="flex items-center justify-between">
+                <span style={{ color: "#5a6072" }}>Market breadth</span>
+                <span className="font-black font-mono" style={{ color: stats.gainers > stats.losers ? "#26a69a" : "#ef5350" }}>
+                  {stats.gainers + stats.losers > 0 ? `${Math.round((stats.gainers / (stats.gainers + stats.losers)) * 100)}%` : "—"} bull
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span style={{ color: "#5a6072" }}>Smart money</span>
+                <span className="font-black" style={{ color: stats.btcDom > 55 ? "#f7931a" : "#a78bfa" }}>
+                  {stats.btcDom > 55 ? "BTC-led" : "Alt rotation"}
+                </span>
+              </div>
             </div>
-            <div>
-              <div className="text-[8px] font-black uppercase tracking-wider mb-2" style={{ color: "#ef5350" }}>📉 Losers</div>
-              {topLosers.map(c => (
-                <div key={c.id} className="flex items-center justify-between py-1 border-b" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-                  <div className="flex items-center gap-1.5">
-                    <img src={c.image} alt={c.symbol} className="w-4 h-4 rounded-full"
-                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-                    <span className="text-[10px] font-black text-white">{c.symbol}</span>
-                  </div>
-                  <span className="text-[9px] font-black font-mono" style={{ color: "#ef5350" }}>{getVal(c).toFixed(1)}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          </InfoCard>
         </div>
       </div>
+
+      {/* ── Hover card (portal-style fixed positioning) ──────────────────── */}
+      <AnimatePresence>
+        {hover && <HoverCard tile={hover.tile} x={hover.x} y={hover.y} viewportW={viewportW} viewportH={viewportH} />}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Sub-components
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+function StatCard({ k, v, sub, accent }: { k: string; v: string; sub?: string; accent: string }) {
+  return (
+    <div className="rounded-xl px-3 py-2.5 relative overflow-hidden"
+      style={{
+        background: "rgba(13,17,26,0.7)",
+        border: "1px solid rgba(255,255,255,0.05)",
+        backdropFilter: "blur(8px)",
+      }}>
+      <div className="absolute inset-x-0 top-0 h-px" style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} />
+      <div className="text-[9px] font-black tracking-widest uppercase mb-1" style={{ color: "#5a6072" }}>{k}</div>
+      <div className="font-black text-[15px] truncate" style={{ color: accent }}>{v}</div>
+      {sub && <div className="text-[9px] font-mono mt-0.5" style={{ color: "#5a6072" }}>{sub}</div>}
+    </div>
+  );
+}
+
+function InfoCard({ title, icon: Icon, children }: { title: string; icon: typeof Activity; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl p-3"
+      style={{ background: "rgba(13,17,26,0.6)", border: "1px solid rgba(255,255,255,0.05)", backdropFilter: "blur(8px)" }}>
+      <div className="flex items-center gap-1.5 mb-2">
+        <Icon size={11} className="text-[#4d7fff]" />
+        <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: "#8892a4" }}>{title}</span>
+      </div>
+      {children}
     </div>
   );
 }
