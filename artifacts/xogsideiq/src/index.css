@@ -105,3 +105,12 @@
 .panel-title { @apply text-[10px] font-bold uppercase tracking-wider text-muted-foreground; }
 .panel-link { @apply text-[10px] text-primary hover:underline cursor-pointer; }
 .row-item { @apply flex items-center justify-between px-2 py-1 hover:bg-secondary/50 transition-colors; }
+
+/* Mobile chip scroller — hide scrollbar across all browsers + iOS momentum */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.scrollbar-hide::-webkit-scrollbar { display: none; width: 0; height: 0; }

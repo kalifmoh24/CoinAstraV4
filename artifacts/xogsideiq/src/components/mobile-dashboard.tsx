@@ -9,6 +9,7 @@ import {
   Sparkles, User, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Wifi,
 } from "lucide-react";
 import { MobileNav } from "@/components/mobile-nav";
+import { ChipScroller } from "@/components/ui/chip-scroller";
 import { NotificationCenter } from "@/components/notification-center";
 import { MiniSparkline } from "@/components/mobile-market-card";
 import { useTheme } from "@/components/theme-provider";
@@ -327,8 +328,7 @@ export function MobileDashboard() {
         </div>
 
         {/* Row 2: Market status strip */}
-        <div className="flex items-center gap-4 px-4 pb-2 overflow-x-auto"
-          style={{ scrollbarWidth: "none" }}>
+        <ChipScroller className="pb-2" gap="1rem" edgePadding="1rem">
           {[
             { label: "MCap", value: fmtLarge(overview?.totalMarketCap ?? 2_780_000_000_000), color: "#4d7fff" },
             { label: "BTC Dom", value: `${overview?.btcDominance?.toFixed(1) ?? "58.3"}%`, color: "#f7931a" },
@@ -341,7 +341,7 @@ export function MobileDashboard() {
               <span className="text-[9px] font-bold font-mono" style={{ color: s.color }}>{s.value}</span>
             </div>
           ))}
-        </div>
+        </ChipScroller>
       </motion.header>
 
       {/* ══════════════════════════════════════════════════════════════════
@@ -510,8 +510,8 @@ export function MobileDashboard() {
         {/* ══════════════════════════════════════════════════════════════
             SECTION 4: QUICK STAT CHIPS
         ══════════════════════════════════════════════════════════════ */}
-        <div className="px-4 pt-3">
-          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+        <div className="pt-3">
+          <ChipScroller gap="0.5rem" className="pb-1">
             {[
               { label: "MCap", value: fmtLarge(overview?.totalMarketCap ?? 2_780_000_000_000), color: "#2962ff", icon: Globe },
               { label: "24h Vol", value: fmtLarge(overview?.totalVolume24h ?? 96_000_000_000), color: "#26a69a", icon: BarChart2 },
@@ -528,7 +528,7 @@ export function MobileDashboard() {
                 </div>
               </div>
             ))}
-          </div>
+          </ChipScroller>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════
@@ -536,7 +536,7 @@ export function MobileDashboard() {
         ══════════════════════════════════════════════════════════════ */}
         <div className="px-4 pt-4">
           <SH title="AI Opportunities" icon={Brain} color="#7c3aed" badge="PRO" link="/screener" linkLabel="Screen all" />
-          <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+          <ChipScroller className="-mx-4 pb-1" gap="0.75rem" edgePadding="1rem">
             {aiOpps.map((opp, i) => {
               const confColor = opp.conf >= 85 ? "#26a69a" : opp.conf >= 70 ? "#f7931a" : "#ef5350";
               return (
@@ -586,7 +586,7 @@ export function MobileDashboard() {
                 </motion.div>
               );
             })}
-          </div>
+          </ChipScroller>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════
@@ -594,7 +594,7 @@ export function MobileDashboard() {
         ══════════════════════════════════════════════════════════════ */}
         <div className="px-4 pt-4">
           <SH title="Trending Narratives" icon={Sparkles} color="#7c3aed" link="/narratives" />
-          <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+          <ChipScroller className="-mx-4 pb-1" gap="0.625rem" edgePadding="1rem">
             {NARRATIVES.map((n, i) => (
               <motion.div key={n.id}
                 initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
@@ -625,7 +625,7 @@ export function MobileDashboard() {
                 </div>
               </motion.div>
             ))}
-          </div>
+          </ChipScroller>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════
@@ -714,7 +714,7 @@ export function MobileDashboard() {
               </button>
             ))}
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+          <ChipScroller className="-mx-4 pb-1" gap="0.75rem" edgePadding="1rem">
             {coinsLoading
               ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="shrink-0 w-36 h-32 rounded-2xl animate-pulse" style={{ background: "rgba(255,255,255,0.04)" }} />)
               : movers.slice(0, 8).map((coin, i) => {
@@ -753,7 +753,7 @@ export function MobileDashboard() {
                     </motion.div>
                   );
                 })}
-          </div>
+          </ChipScroller>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════
@@ -1029,7 +1029,7 @@ export function MobileDashboard() {
         {trendingCoins.length > 0 && (
           <div className="px-4 pt-0 pb-2">
             <SH title="Trending" icon={Flame} color="#f7931a" badge="HOT" link="/markets" />
-            <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+            <ChipScroller className="-mx-4 pb-1" gap="0.625rem" edgePadding="1rem">
               {trendingCoins.map((t, i) => {
                 const ch = t.data?.price_change_percentage_24h?.usd ?? 0;
                 return (
@@ -1049,7 +1049,7 @@ export function MobileDashboard() {
                   </motion.div>
                 );
               })}
-            </div>
+            </ChipScroller>
           </div>
         )}
 
