@@ -102,8 +102,8 @@ export async function getStoredCoins(): Promise<CoinMarket[]> {
 /** Force-refresh the hot pages (1-5) immediately — called by the refresh button. */
 export async function forceRefreshHot(): Promise<void> {
   for (let page = 1; page <= 5; page++) {
-    const coins = await _fetchPage(page, true);
-    if (coins) _emit(coins, page);
+    const result = await _fetchPage(page, true);
+    if (result) _emit(result.data, page);
     await sleep(1_200);
   }
 }
@@ -124,13 +124,13 @@ function _emit(coins: CoinMarket[], page: number): void {
   _listeners.forEach(cb => { try { cb(coins, page); } catch { /* ignore */ } });
 }
 
-async function _fetchPage(page: number, forceRefresh = false): Promise<CoinMarket[] | null> {
+async function _fetchPage(page: number, forceRefresh = false): Promise<{ data: CoinMarket[]; fromCache: boolean } | null> {
   const key = `coinastra:markets:p${page}`;
 
   if (!forceRefresh) {
     // Serve from IDB if still fresh
     const cached = await idbGet<CoinMarket[]>(key);
-    if (cached && cached.length > 0) return cached;
+    if (cached && cached.length > 0) return { data: cached, fromCache: true };
   }
 
   try {
@@ -138,36 +138,35 @@ async function _fetchPage(page: number, forceRefresh = false): Promise<CoinMarke
       `/api/coins/markets?per_page=250&page=${page}&sparkline=true&price_change_percentage=1h,7d`
     );
     if (!res.ok) {
-      // On error, return stale IDB data rather than null
       const stale = await idbGet<CoinMarket[]>(key);
-      return stale ?? null;
+      return stale ? { data: stale, fromCache: true } : null;
     }
     const data = (await res.json()) as CoinMarket[];
     if (data.length > 0) {
       await idbSet(key, data, idbTtl(page));
+      return { data, fromCache: false };
     }
-    return data.length > 0 ? data : null;
+    return null;
   } catch {
     const stale = await idbGet<CoinMarket[]>(key);
-    return stale ?? null;
+    return stale ? { data: stale, fromCache: true } : null;
   }
 }
 
 async function _runSync(): Promise<void> {
   // ── Phase 1: Progressive initial load ────────────────────────────────────
   for (let page = 1; page <= TOTAL_PAGES; page++) {
-    const coins = await _fetchPage(page);
+    const result = await _fetchPage(page);
 
-    if (coins && coins.length > 0) {
+    if (result && result.data.length > 0) {
       _progress.pagesLoaded++;
       _progress.totalCoins = _progress.pagesLoaded * 250;
       if (page === 1) _progress.lastRefreshedAt = Date.now();
-      _emit(coins, page);
+      _emit(result.data, page);
     }
 
-    // IDB cache hit = no API call made, no delay needed
-    const wasCached = (await idbGet<CoinMarket[]>(`coinastra:markets:p${page}`)) !== null;
-    if (!wasCached) {
+    // Only pace when we actually hit the network — IDB cache hits are free.
+    if (result && !result.fromCache) {
       await sleep(fetchDelay(page));
     }
   }
@@ -180,9 +179,9 @@ async function _runSync(): Promise<void> {
   // Pages 1-5: refresh every 30 seconds (live prices)
   setInterval(async () => {
     for (let page = 1; page <= 5; page++) {
-      const coins = await _fetchPage(page, true);
-      if (coins) {
-        _emit(coins, page);
+      const result = await _fetchPage(page, true);
+      if (result) {
+        _emit(result.data, page);
         if (page === 1) _progress.lastRefreshedAt = Date.now();
       }
       await sleep(1_500);
@@ -192,8 +191,8 @@ async function _runSync(): Promise<void> {
   // Pages 6-20: refresh every 10 minutes
   setInterval(async () => {
     for (let page = 6; page <= 20; page++) {
-      const coins = await _fetchPage(page, true);
-      if (coins) _emit(coins, page);
+      const result = await _fetchPage(page, true);
+      if (result) _emit(result.data, page);
       await sleep(3_500);
     }
   }, 10 * 60_000);
@@ -201,8 +200,8 @@ async function _runSync(): Promise<void> {
   // Pages 21-70: refresh every 30 minutes
   setInterval(async () => {
     for (let page = 21; page <= TOTAL_PAGES; page++) {
-      const coins = await _fetchPage(page, true);
-      if (coins) _emit(coins, page);
+      const result = await _fetchPage(page, true);
+      if (result) _emit(result.data, page);
       await sleep(5_000);
     }
   }, 30 * 60_000);

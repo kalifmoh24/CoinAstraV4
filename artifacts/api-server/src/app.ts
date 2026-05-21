@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { startBackgroundRefresh } from "./lib/coingecko";
 import { corsOptions } from "./config/cors";
 import { globalLimiter } from "./middleware/rateLimiter";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
@@ -40,5 +41,10 @@ app.use("/api", router);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
+
+// Pre-warm CoinGecko cache + start the 30s background refresher so the
+// frontend always has data to render, even when upstream is rate-limiting us.
+startBackgroundRefresh();
+logger.info("CoinGecko background refresher started");
 
 export default app;

@@ -54,9 +54,9 @@ export function GlobalTicker() {
       <style>{`.ticker-hide::-webkit-scrollbar{display:none}`}</style>
       <div className="ticker-hide flex items-center gap-0 px-3 whitespace-nowrap min-w-full">
 
-        <TickerItem label="Coins" value={g?.active_cryptocurrencies.toLocaleString() ?? "—"} />
+        <TickerItem label="Coins" value={g?.active_cryptocurrencies?.toLocaleString() ?? "—"} />
         {sep}
-        <TickerItem label="Exchanges" value={g?.markets.toLocaleString() ?? "—"} />
+        <TickerItem label="Exchanges" value={g?.markets?.toLocaleString() ?? "—"} />
         {sep}
         <span className="flex items-center gap-1.5 px-2">
           <span style={{ color: "#4a5068" }}>Market Cap:</span>

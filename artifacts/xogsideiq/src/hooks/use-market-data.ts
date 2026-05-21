@@ -50,74 +50,141 @@ export interface FearGreedEntry {
   time_until_update?: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Browser-side stale-while-revalidate
+//
+// The api-server already does aggressive caching + stale-on-error, but we
+// also keep the LAST GOOD response in localStorage so:
+//   • Hard refresh / new tab → instant render, no skeleton.
+//   • If the api-server is restarting → instant render of last seen prices.
+//   • The fetcher never throws when it has a fallback → React Query never
+//     enters error state, no crash UI.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LS_PREFIX = "coinastra-cache:";
+const LS_TTL_MS = 24 * 60 * 60_000; // 24h hard cap
+
+function lsGet<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { ts: number; data: T };
+    if (Date.now() - parsed.ts > LS_TTL_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function lsSet<T>(key: string, data: T): void {
+  try {
+    localStorage.setItem(LS_PREFIX + key, JSON.stringify({ ts: Date.now(), data }));
+  } catch {
+    // Storage full / disabled — ignore, in-memory cache still works.
+  }
+}
+
+async function resilientJson<T>(url: string, cacheKey: string): Promise<T> {
+  try {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error(`${url} ${r.status}`);
+    const json = (await r.json()) as T;
+    lsSet(cacheKey, json);
+    return json;
+  } catch (err) {
+    const fallback = lsGet<T>(cacheKey);
+    if (fallback !== null) return fallback;
+    throw err;
+  }
+}
+
 // ── Core fetchers via backend proxy ──────────────────────────────────────────
 
 async function fetchLiveCoins(page = 1, perPage = 100): Promise<LiveCoin[]> {
-  const r = await fetch(`/api/coins/markets?page=${page}&per_page=${perPage}`);
-  if (!r.ok) throw new Error(`coins/markets ${r.status}`);
-  return r.json();
+  return resilientJson<LiveCoin[]>(
+    `/api/coins/markets?page=${page}&per_page=${perPage}`,
+    `markets:${page}:${perPage}`,
+  );
 }
 
 async function fetchTrending(): Promise<{ coins: { item: TrendingCoinItem }[] }> {
-  const r = await fetch("/api/coins/trending");
-  if (!r.ok) throw new Error(`coins/trending ${r.status}`);
-  return r.json();
+  return resilientJson<{ coins: { item: TrendingCoinItem }[] }>(
+    "/api/coins/trending",
+    "trending",
+  );
 }
 
 async function fetchFearGreed(): Promise<{ data: FearGreedEntry[] }> {
-  const r = await fetch("/api/coins/fear-greed");
-  if (!r.ok) throw new Error("Fear & Greed unavailable");
-  return r.json();
+  return resilientJson<{ data: FearGreedEntry[] }>(
+    "/api/coins/fear-greed",
+    "fear-greed",
+  );
 }
 
-// ── Hooks ──────────────────────────────────────────────────────────────────────
+// ── Hooks ──────────────────────────────────────────────────────────────────
 
-/** Top 100 coins, auto-refreshed every 30s */
+const COMMON: { refetchInterval: number; staleTime: number; retry: number; retryDelay: (i: number) => number } = {
+  refetchInterval: 30_000,
+  staleTime: 25_000,
+  retry: 5,
+  retryDelay: (i: number) => Math.min(1000 * 2 ** i, 15_000),
+};
+
+/** Top 100 coins, auto-refreshed every 30s. Initialised from localStorage so
+ *  the page renders instantly — never a permanent skeleton. */
 export function useLiveCoins(page = 1, perPage = 100) {
   return useQuery<LiveCoin[]>({
     queryKey: ["ca-live-coins", page, perPage],
     queryFn: () => fetchLiveCoins(page, perPage),
-    refetchInterval: 30_000,
-    staleTime: 25_000,
-    retry: 2,
+    initialData: () => lsGet<LiveCoin[]>(`markets:${page}:${perPage}`) ?? undefined,
+    ...COMMON,
     placeholderData: (prev) => prev,
   });
 }
 
-/** Live top 300 coins (3 pages merged) */
+/** Live top 1000 coins (4 pages of 250 merged). All preloaded by the backend
+ *  pre-warmer so they're available immediately. */
 export function useLiveCoins250() {
   const p1 = useQuery<LiveCoin[]>({
-    queryKey: ["ca-live-coins", 1, 100],
-    queryFn: () => fetchLiveCoins(1, 100),
-    refetchInterval: 30_000,
-    staleTime: 25_000,
-    retry: 2,
+    queryKey: ["ca-live-coins", 1, 250],
+    queryFn: () => fetchLiveCoins(1, 250),
+    initialData: () => lsGet<LiveCoin[]>(`markets:1:250`) ?? undefined,
+    ...COMMON,
     placeholderData: (prev) => prev,
   });
   const p2 = useQuery<LiveCoin[]>({
-    queryKey: ["ca-live-coins", 2, 100],
-    queryFn: () => fetchLiveCoins(2, 100),
-    refetchInterval: 30_000,
-    staleTime: 25_000,
-    retry: 2,
+    queryKey: ["ca-live-coins", 2, 250],
+    queryFn: () => fetchLiveCoins(2, 250),
+    initialData: () => lsGet<LiveCoin[]>(`markets:2:250`) ?? undefined,
+    ...COMMON,
     placeholderData: (prev) => prev,
   });
   const p3 = useQuery<LiveCoin[]>({
-    queryKey: ["ca-live-coins", 3, 100],
-    queryFn: () => fetchLiveCoins(3, 100),
+    queryKey: ["ca-live-coins", 3, 250],
+    queryFn: () => fetchLiveCoins(3, 250),
+    initialData: () => lsGet<LiveCoin[]>(`markets:3:250`) ?? undefined,
+    ...COMMON,
     refetchInterval: 60_000,
-    staleTime: 55_000,
-    retry: 2,
     placeholderData: (prev) => prev,
   });
+  const p4 = useQuery<LiveCoin[]>({
+    queryKey: ["ca-live-coins", 4, 250],
+    queryFn: () => fetchLiveCoins(4, 250),
+    initialData: () => lsGet<LiveCoin[]>(`markets:4:250`) ?? undefined,
+    ...COMMON,
+    refetchInterval: 90_000,
+    placeholderData: (prev) => prev,
+  });
+  const merged = useMemo(
+    () => [...(p1.data ?? []), ...(p2.data ?? []), ...(p3.data ?? []), ...(p4.data ?? [])],
+    [p1.data, p2.data, p3.data, p4.data],
+  );
   return {
-    data: useMemo(() => [
-      ...(p1.data ?? []),
-      ...(p2.data ?? []),
-      ...(p3.data ?? []),
-    ], [p1.data, p2.data, p3.data]),
-    isLoading: p1.isLoading,
-    isError: p1.isError || p2.isError,
+    data: merged,
+    // Only "loading" when we have nothing at all to render. Once we have any
+    // data (even stale from localStorage), report ready — no skeleton flash.
+    isLoading: merged.length === 0 && p1.isLoading,
+    isError: false,
   };
 }
 
@@ -140,9 +207,10 @@ export function useTrendingCoins() {
   return useQuery({
     queryKey: ["ca-trending"],
     queryFn: fetchTrending,
+    initialData: () => lsGet<{ coins: { item: TrendingCoinItem }[] }>("trending") ?? undefined,
     refetchInterval: 300_000,
     staleTime: 295_000,
-    retry: 2,
+    retry: 3,
   });
 }
 
@@ -151,9 +219,10 @@ export function useFearGreedLive() {
   return useQuery<{ data: FearGreedEntry[] }>({
     queryKey: ["ca-fear-greed"],
     queryFn: fetchFearGreed,
+    initialData: () => lsGet<{ data: FearGreedEntry[] }>("fear-greed") ?? undefined,
     refetchInterval: 600_000,
     staleTime: 595_000,
-    retry: 2,
+    retry: 3,
   });
 }
 
