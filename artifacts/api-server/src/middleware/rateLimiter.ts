@@ -1,4 +1,7 @@
-import rateLimit from "express-rate-limit";
+import * as expressRateLimit from "express-rate-limit";
+
+type RateLimitFn = (options?: any) => any;
+const rateLimit = ((expressRateLimit as any).default ?? expressRateLimit) as RateLimitFn;
 
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
