@@ -4,6 +4,8 @@
     "outDir": "dist",
     "rootDir": "src",
     "lib": ["es2022", "dom"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "types": ["node"]
   },
   "include": ["src"],
