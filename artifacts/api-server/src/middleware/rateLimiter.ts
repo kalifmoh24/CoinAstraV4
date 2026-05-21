@@ -1,8 +1,7 @@
-import rateLimit from "express-rate-limit";
+const rateLimit = require('express-rate-limit');
 
-const createRateLimiter = (options: Parameters<typeof rateLimit>[0]) => {
-  const rateLimitFn = (rateLimit as unknown as { default?: typeof rateLimit }).default ?? rateLimit;
-  return rateLimitFn(options);
+const createRateLimiter = (options: any) => {
+  return rateLimit(options);
 };
 
 export const globalLimiter = createRateLimiter({
