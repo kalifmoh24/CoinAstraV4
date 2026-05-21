@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import {
   LayoutGrid, TrendingUp, TrendingDown, Activity, Flame,
   Layers, Sparkles, Zap, BarChart3, DollarSign, Gauge,
+  ZoomIn, ZoomOut, RotateCcw, Crosshair, Maximize2, Brain, Waves,
 } from "lucide-react";
 import { useAllCoins } from "@/hooks/use-all-coins";
 import type { CoinMarket } from "@/hooks/use-all-coins";
@@ -67,7 +68,7 @@ function sectorOf(coin: CoinMarket): string {
  * Modes & sizing
  * ──────────────────────────────────────────────────────────────────────────── */
 
-type SizeMode  = "mcap" | "volume" | "volatility" | "ai_score";
+type SizeMode  = "mcap" | "volume" | "volatility" | "ai_score" | "dominance" | "trending";
 type ViewMode  = "1h" | "24h" | "7d";
 type CountMode = 50 | 100 | 200 | 500;
 
@@ -75,13 +76,29 @@ const SIZE_MODES: { id: SizeMode; label: string; icon: typeof BarChart3 }[] = [
   { id: "mcap",       label: "Market Cap", icon: DollarSign },
   { id: "volume",     label: "Volume 24h", icon: BarChart3 },
   { id: "volatility", label: "Volatility", icon: Activity   },
+  { id: "dominance",  label: "Dominance",  icon: Crosshair  },
+  { id: "trending",   label: "Trending",   icon: Flame      },
   { id: "ai_score",   label: "AI Score",   icon: Sparkles   },
 ];
 
 const SECTORS_ORDER = [
-  "All", "Trending", "Layer 1", "Layer 2", "DeFi", "AI",
+  "All", "Trending", "Smart Money", "Whale Activity",
+  "Solana Eco", "Ethereum Eco",
+  "Layer 1", "Layer 2", "DeFi", "AI",
   "Meme", "Gaming", "RWA", "DePIN", "Stables", "Other",
 ];
+
+/* Ecosystem groupings (hand-curated, expandable) */
+const SOLANA_ECO = new Set<string>([
+  "solana", "jito-governance-token", "raydium", "bonk", "dogwifhat", "popcat",
+  "book-of-meme", "jupiter-exchange-solana", "pyth-network", "render-token",
+  "helium", "marinade", "tensor", "drift-protocol", "kamino", "io",
+]);
+const ETHEREUM_ECO = new Set<string>([
+  "ethereum", "arbitrum", "optimism", "matic-network", "base", "blast",
+  "starknet", "mantle", "lido", "uniswap", "aave", "chainlink", "maker",
+  "ether-fi", "rocket-pool", "ondo", "pendle", "gmx", "dydx",
+]);
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Treemap layout — squarified slice-and-dice
@@ -232,11 +249,14 @@ const Tile = React.memo(function Tile({
 }) {
   const { coin, x, y, w, h, pct } = tile;
   const vis = tileVisuals(pct);
+  const ai = aiScore(coin);
+  const isExtreme = Math.abs(pct) >= 8;
 
   const area = w * h;
   const showFull   = area > 7000;
   const showMid    = area > 3000;
   const showSym    = area > 1200;
+  const showAIChip = area > 9500;
 
   const fontSym  = Math.max(10, Math.min(22, Math.sqrt(area) / 8));
   const fontPct  = Math.max(8,  Math.min(15, Math.sqrt(area) / 11));
@@ -250,8 +270,17 @@ const Tile = React.memo(function Tile({
     <motion.div
       layout
       initial={false}
-      animate={{ x, y, width: w, height: h }}
-      transition={{ type: "spring", stiffness: 180, damping: 26, mass: 0.7 }}
+      animate={isExtreme && showSym ? {
+        x, y, width: w, height: h,
+        boxShadow: [
+          vis.glow || `0 0 0px ${pct >= 0 ? "rgba(38,166,154,0)" : "rgba(239,83,80,0)"}`,
+          `0 0 ${Math.min(40, Math.abs(pct) * 2)}px ${pct >= 0 ? "rgba(38,166,154,0.55)" : "rgba(239,83,80,0.55)"}`,
+          vis.glow || `0 0 0px ${pct >= 0 ? "rgba(38,166,154,0)" : "rgba(239,83,80,0)"}`,
+        ],
+      } : { x, y, width: w, height: h }}
+      transition={isExtreme && showSym
+        ? { x: { type: "spring", stiffness: 180, damping: 26 }, y: { type: "spring", stiffness: 180, damping: 26 }, width: { type: "spring", stiffness: 180, damping: 26 }, height: { type: "spring", stiffness: 180, damping: 26 }, boxShadow: { duration: 1.8, repeat: Infinity, ease: "easeInOut" } }
+        : { type: "spring", stiffness: 180, damping: 26, mass: 0.7 }}
       className="absolute cursor-pointer overflow-hidden"
       style={{
         background: vis.bg,
@@ -259,6 +288,7 @@ const Tile = React.memo(function Tile({
         borderRadius: Math.min(8, Math.max(3, Math.sqrt(area) / 22)),
         boxShadow: vis.glow,
         padding: showFull ? 8 : showMid ? 5 : 3,
+        willChange: "transform",
       }}
       whileHover={{ scale: 1.025, zIndex: 20, boxShadow: `${vis.glow}, 0 8px 24px rgba(0,0,0,0.5)` }}
       onMouseEnter={(e) => onHover(tile, e.clientX, e.clientY)}
@@ -270,6 +300,22 @@ const Tile = React.memo(function Tile({
       {/* Glass overlay */}
       <div className="absolute inset-0 pointer-events-none"
         style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0.08) 100%)" }} />
+
+      {/* AI sentiment chip — top right on large tiles */}
+      {showAIChip && (
+        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md pointer-events-none flex items-center gap-0.5"
+          style={{
+            background: ai >= 70 ? "rgba(38,166,154,0.22)" : ai >= 40 ? "rgba(255,255,255,0.06)" : "rgba(239,83,80,0.22)",
+            border: `1px solid ${ai >= 70 ? "rgba(38,166,154,0.45)" : ai >= 40 ? "rgba(255,255,255,0.12)" : "rgba(239,83,80,0.45)"}`,
+            backdropFilter: "blur(6px)",
+          }}>
+          <Brain size={8} style={{ color: ai >= 70 ? "#26a69a" : ai >= 40 ? "#a78bfa" : "#ef5350" }} />
+          <span className="font-mono font-black text-[9px]"
+            style={{ color: ai >= 70 ? "#26a69a" : ai >= 40 ? "#a78bfa" : "#ef5350" }}>
+            {ai}
+          </span>
+        </div>
+      )}
 
       {showSym && (
         <div className="relative flex items-start justify-between gap-1">
@@ -317,8 +363,10 @@ function HoverCard({ tile, x, y, viewportW, viewportH }: { tile: TileOut; x: num
   const sector = sectorOf(coin);
   const sm = SECTOR_META[sector];
   const ai = aiScore(coin);
+  const sparkPts = coin.sparkline_in_7d?.price?.slice(-48) ?? [];
+  const sparkColor = pct >= 0 ? "#26a69a" : "#ef5350";
 
-  const TIP_W = 240, TIP_H = 220, PAD = 8;
+  const TIP_W = 280, TIP_H = 310, PAD = 8;
   // Clamp horizontally: flip to the left if too close to right edge, but never go off-left
   const rawLeft = x > viewportW - TIP_W - 20 ? x - TIP_W - 10 : x + 14;
   const left    = Math.max(PAD, Math.min(rawLeft, viewportW - TIP_W - PAD));
@@ -331,7 +379,7 @@ function HoverCard({ tile, x, y, viewportW, viewportH }: { tile: TileOut; x: num
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: 0.12 }}
-      className="fixed pointer-events-none z-50 rounded-xl p-3 w-[240px] backdrop-blur-xl"
+      className="fixed pointer-events-none z-50 rounded-xl p-3 w-[280px] backdrop-blur-xl"
       style={{
         left,
         top,
@@ -352,13 +400,24 @@ function HoverCard({ tile, x, y, viewportW, viewportH }: { tile: TileOut; x: num
           </div>
         </div>
       </div>
+      {/* Mini chart preview */}
+      {sparkPts.length >= 2 && (
+        <div className="mb-2 rounded-lg overflow-hidden relative"
+          style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
+          <Sparkline points={sparkPts} color={sparkColor} w={256} h={56} />
+          <div className="absolute top-1 left-1.5 text-[8px] font-black uppercase tracking-widest"
+            style={{ color: "#5a6072" }}>7D</div>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[10px]">
         <Row k="Price"  v={fmtPrice(coin.current_price)} />
         <Row k="Rank"   v={`#${coin.market_cap_rank ?? "—"}`} />
         <Row k="Mcap"   v={fmtBig(coin.market_cap)} />
         <Row k="Vol"    v={fmtBig(coin.total_volume)} />
+        <Row k="1h"     v={fmtPct(coin.price_change_percentage_1h_in_currency ?? 0)} mono />
         <Row k="24h"    v={fmtPct(coin.price_change_percentage_24h ?? 0)} mono />
         <Row k="7d"     v={fmtPct(coin.price_change_percentage_7d_in_currency ?? 0)} mono />
+        <Row k="V/M"    v={`${((coin.total_volume / Math.max(1, coin.market_cap)) * 100).toFixed(1)}%`} mono />
       </div>
       <div className="mt-2.5 pt-2 border-t flex items-center justify-between"
         style={{ borderColor: "rgba(255,255,255,0.06)" }}>
@@ -427,17 +486,34 @@ export default function Heatmap() {
   const universe = useMemo<CoinMarket[]>(() => {
     if (!coins.length) return [];
     let pool = coins.filter(c => c.market_cap > 0);
+    const totalMcapAll = coins.reduce((s, c) => s + (c.market_cap || 0), 0) || 1;
 
     if (sector === "Trending") {
       pool = [...pool].sort((a, b) =>
         Math.abs(b.price_change_percentage_24h ?? 0) - Math.abs(a.price_change_percentage_24h ?? 0)
       );
+    } else if (sector === "Smart Money") {
+      pool = [...pool].filter(c => aiScore(c) >= 65).sort((a, b) => aiScore(b) - aiScore(a));
+    } else if (sector === "Whale Activity") {
+      pool = [...pool].sort((a, b) => {
+        const ra = (a.total_volume || 0) / Math.max(1, a.market_cap || 1);
+        const rb = (b.total_volume || 0) / Math.max(1, b.market_cap || 1);
+        return rb - ra;
+      });
+    } else if (sector === "Solana Eco") {
+      pool = pool.filter(c => SOLANA_ECO.has(c.id));
+    } else if (sector === "Ethereum Eco") {
+      pool = pool.filter(c => ETHEREUM_ECO.has(c.id));
     } else if (sector !== "All") {
       pool = pool.filter(c => sectorOf(c) === sector);
     }
 
     return pool.slice(0, countMode);
+    // totalMcapAll captured in dep below
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coins, sector, countMode]);
+
+  const totalMcapAll = useMemo(() => coins.reduce((s, c) => s + (c.market_cap || 0), 0) || 1, [coins]);
 
   /* ── Treemap input by sizing mode ───────────────────────────────────────── */
   const treemap = useMemo<TileOut[]>(() => {
@@ -448,6 +524,8 @@ export default function Heatmap() {
       if (sizeMode === "mcap")          v = c.market_cap;
       else if (sizeMode === "volume")   v = c.total_volume;
       else if (sizeMode === "volatility") v = Math.abs(c.price_change_percentage_24h ?? 0) * (c.market_cap || 1) / 1e8;
+      else if (sizeMode === "dominance") v = (c.market_cap / totalMcapAll) * 1e9;
+      else if (sizeMode === "trending") v = Math.abs(c.price_change_percentage_24h ?? 0) * Math.sqrt(c.market_cap || 1);
       else if (sizeMode === "ai_score") v = aiScore(c) * Math.sqrt(c.market_cap || 1);
       return { id: c.id, value: Math.max(1, v), coin: c, pct: pctOf(c) };
     });
@@ -455,7 +533,7 @@ export default function Heatmap() {
     // Sort largest first for stable squarified layout
     items.sort((a, b) => b.value - a.value);
     return buildTreemap(items, 0, 0, cW, cH);
-  }, [universe, sizeMode, viewMode, cW, cH]);
+  }, [universe, sizeMode, viewMode, cW, cH, totalMcapAll]);
 
   /* ── Top analytics ──────────────────────────────────────────────────────── */
   const stats = useMemo(() => {
@@ -508,6 +586,73 @@ export default function Heatmap() {
   useEffect(() => () => {
     if (hoverRafRef.current != null) cancelAnimationFrame(hoverRafRef.current);
   }, []);
+
+  /* ── Zoom & pan ─────────────────────────────────────────────────────────── */
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
+  const pinchRef = useRef<{ initialDist: number; initialZoom: number } | null>(null);
+
+  const clampZoom = (z: number) => Math.max(1, Math.min(6, z));
+  const resetView = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
+
+  const onWheel = useCallback((e: React.WheelEvent) => {
+    if (!e.ctrlKey && !e.metaKey && Math.abs(e.deltaY) < 4) return;
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    setZoom(prev => {
+      const next = clampZoom(prev * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+      if (next === prev) return prev;
+      // Zoom around cursor: keep the world point under cursor fixed
+      setPan(p => {
+        const worldX = (cx - p.x) / prev;
+        const worldY = (cy - p.y) / prev;
+        return { x: cx - worldX * next, y: cy - worldY * next };
+      });
+      return next;
+    });
+  }, []);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 1 && !e.shiftKey && !e.altKey) return; // middle / shift / alt
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y };
+  }, [pan]);
+
+  const onMouseMoveCanvas = useCallback((e: React.MouseEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    setPan({ x: d.panX + (e.clientX - d.startX), y: d.panY + (e.clientY - d.startY) });
+  }, []);
+
+  const onMouseUpCanvas = useCallback(() => { dragRef.current = null; }, []);
+
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      pinchRef.current = { initialDist: d, initialZoom: zoom };
+    } else if (e.touches.length === 1) {
+      const t = e.touches[0];
+      dragRef.current = { startX: t.clientX, startY: t.clientY, panX: pan.x, panY: pan.y };
+    }
+  }, [pan, zoom]);
+
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchRef.current) {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      setZoom(clampZoom(pinchRef.current.initialZoom * (d / pinchRef.current.initialDist)));
+    } else if (e.touches.length === 1 && dragRef.current && zoom > 1) {
+      const t = e.touches[0];
+      const d = dragRef.current;
+      setPan({ x: d.panX + (t.clientX - d.startX), y: d.panY + (t.clientY - d.startY) });
+    }
+  }, [zoom]);
+
+  const onTouchEnd = useCallback(() => { dragRef.current = null; pinchRef.current = null; }, []);
 
   const onClick = useCallback((c: CoinMarket) => {
     setLocation(`/coin/${c.id}`);
