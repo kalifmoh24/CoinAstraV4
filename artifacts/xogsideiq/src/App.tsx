@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
+import { startBgSync } from "@/lib/bg-sync";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -67,6 +68,10 @@ function Router() {
 }
 
 function App() {
+  // Boot the background coin sync engine once at app load, so all 17,500
+  // coins are streaming into IndexedDB before the user ever opens /markets.
+  useEffect(() => { startBgSync(); }, []);
+
   return (
     <ThemeProvider defaultTheme="dark">
       <QueryClientProvider client={queryClient}>

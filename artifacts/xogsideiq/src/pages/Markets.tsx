@@ -469,12 +469,6 @@ function SortTH({ label, sk, sortKey, sortDir, onSort, right }:{
 
 // ─── Main Markets Component ───────────────────────────────────────────────────
 
-async function fetchCoinSearchMarkets(q: string) {
-  const res = await fetch(`/api/coins/search?q=${encodeURIComponent(q)}`);
-  if (!res.ok) return { coins: [] };
-  return res.json() as Promise<{ coins: Array<{ id: string; name: string; symbol: string; market_cap_rank: number | null; thumb: string }> }>;
-}
-
 export default function Markets() {
   const [location, setLocation] = useLocation();
   const { isMobile, isTablet } = useScreenSize();
@@ -543,46 +537,69 @@ export default function Markets() {
     [search, instantSearch]
   );
 
-  // Debounced CoinGecko ranked search (350ms)
-  const { data: liveSearchData, isFetching: searchFetching } = useQuery({
-    queryKey: ["cg-search-markets", debouncedSearch],
-    queryFn: () => fetchCoinSearchMarkets(debouncedSearch),
-    enabled: debouncedSearch.length >= 1,
-    staleTime: 30_000,
-  });
-  const liveSearchCoins = liveSearchData?.coins ?? [];
+  // ── Bulletproof local search — never depends on a single API call ─────────
+  // Strategy:
+  //   1. localMatches (from 17k IDB-cached coin index) — always available, zero network
+  //   2. localPriceMap (from bgSync's 17,500 stored coins) — instant price lookup
+  //   3. enrichedSearchData — silent API enrichment for the few missing coins (graceful fail)
+  //   4. Placeholder rows if nothing else — search NEVER appears empty when matches exist
 
-  // searchIds: prefer CoinGecko ranked results; fall back to local index while CG is loading
-  const searchIds = useMemo(() => {
-    const cgIds  = liveSearchCoins.slice(0, 20).map(c => c.id);
-    const locIds = localMatches.slice(0, 20).map(c => c.id);
-    return (cgIds.length > 0 ? cgIds : locIds).join(",");
-  }, [liveSearchCoins, localMatches]);
+  const localPriceMap = useMemo(() => {
+    const m = new Map<string, CoinMarket>();
+    allCoins.forEach(c => m.set(c.id, c));
+    return m;
+  }, [allCoins]);
 
-  // ── Enrich search results with live market data (prices, mcap, volume, sparkline)
-  const { data: enrichedSearchData, isFetching: enrichFetching } = useQuery({
-    queryKey: ["cg-search-enriched", searchIds],
+  // IDs missing from bgSync store — small targeted enrichment query
+  const missingSearchIds = useMemo(() => {
+    if (!isSearchMode || localMatches.length === 0) return "";
+    const missing = localMatches.slice(0, 20).filter(m => !localPriceMap.has(m.id));
+    return missing.map(m => m.id).join(",");
+  }, [isSearchMode, localMatches, localPriceMap]);
+
+  // Silent enrichment for missing coins — failures swallowed, never blocks UI
+  const { data: enrichedSearchData } = useQuery({
+    queryKey: ["cg-search-enrich", missingSearchIds],
     queryFn: async () => {
-      const res = await fetch(`/api/coins/markets?ids=${encodeURIComponent(searchIds)}&per_page=20&sparkline=true&price_change_percentage=1h,7d`);
-      if (!res.ok) return [] as CoinMarket[];
-      return res.json() as Promise<CoinMarket[]>;
+      try {
+        const res = await fetch(`/api/coins/markets?ids=${encodeURIComponent(missingSearchIds)}&per_page=20&sparkline=true&price_change_percentage=1h,7d`);
+        if (!res.ok) return [] as CoinMarket[];
+        return (await res.json()) as CoinMarket[];
+      } catch { return [] as CoinMarket[]; }
     },
-    enabled: isSearchMode && searchIds.length > 0,
-    staleTime: 30_000,
-    retry: 1,
+    enabled: isSearchMode && missingSearchIds.length > 0,
+    staleTime: 60_000,
+    retry: false,
   });
-  // Preserve search rank order
-  const enrichedSearchCoins: CoinMarket[] = useMemo(() => {
-    if (!enrichedSearchData || enrichedSearchData.length === 0) return [];
-    const idOrder = (liveSearchCoins.length > 0 ? liveSearchCoins : localMatches).map(c => c.id);
-    return [...enrichedSearchData].sort((a, b) => {
-      const ai = idOrder.indexOf(a.id);
-      const bi = idOrder.indexOf(b.id);
-      return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
-    });
-  }, [enrichedSearchData, liveSearchCoins, localMatches]);
 
-  const searchLoading = searchFetching || (isSearchMode && searchIds.length > 0 && enrichFetching);
+  // Always returns matches when local index has results — even if every API call failed
+  const enrichedSearchCoins: CoinMarket[] = useMemo(() => {
+    if (!isSearchMode || localMatches.length === 0) return [];
+    const enrichedMap = new Map<string, CoinMarket>();
+    (enrichedSearchData ?? []).forEach(c => enrichedMap.set(c.id, c));
+
+    return localMatches.slice(0, 20).map(m => {
+      // Tier 1: bgSync store (covers ~17,500 coins, refreshes every 30s)
+      const cached = localPriceMap.get(m.id);
+      if (cached) return cached;
+      // Tier 2: just-fetched enrichment (covers misses)
+      const enriched = enrichedMap.get(m.id);
+      if (enriched) return enriched;
+      // Tier 3: metadata-only placeholder so coin still appears in search results
+      return {
+        id: m.id, symbol: m.symbol, name: m.name, image: "",
+        current_price: 0, market_cap: 0, market_cap_rank: 999_999,
+        fully_diluted_valuation: null, total_volume: 0,
+        high_24h: 0, low_24h: 0,
+        price_change_24h: 0, price_change_percentage_24h: 0,
+        circulating_supply: 0, total_supply: null, max_supply: null,
+        ath: 0, ath_change_percentage: 0, atl: 0, last_updated: "",
+      } as unknown as CoinMarket;
+    });
+  }, [isSearchMode, localMatches, localPriceMap, enrichedSearchData]);
+
+  // Search is always instant — local index is in memory, no spinner needed
+  const searchLoading = false;
 
   // ── Resolved coin list ─────────────────────────────────────────────────────
   const baseCoins: CoinMarket[] = isCategoryMode ? (categoryCoins ?? []) : allCoins;
