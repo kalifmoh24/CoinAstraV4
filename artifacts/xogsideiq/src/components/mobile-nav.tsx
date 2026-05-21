@@ -1,12 +1,13 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, BarChart2, Brain, Star, Briefcase, Bell, User } from "lucide-react";
+import { LayoutDashboard, BarChart2, Brain, Star, Briefcase, Bell, User, Unlock } from "lucide-react";
 
 const TABS = [
   { path: "/",           icon: LayoutDashboard, label: "Home",     color: "#2962ff" },
   { path: "/markets",    icon: BarChart2,        label: "Markets",  color: "#26a69a" },
-  { path: "/ai-insights",icon: Brain,            label: "AI",       color: "#7c3aed" },
+  { path: "/unlocks",    icon: Unlock,           label: "Vesting",  color: "#7c3aed" },
+  { path: "/ai-insights",icon: Brain,            label: "AI",       color: "#a855f7" },
   { path: "/watchlist",  icon: Star,             label: "Watch",    color: "#f7931a" },
   { path: "/portfolio",  icon: Briefcase,        label: "Portfolio",color: "#26a69a" },
   { path: "/alerts",     icon: Bell,             label: "Alerts",   color: "#ef5350" },
@@ -29,7 +30,7 @@ export function MobileNav() {
             boxShadow: "0 -4px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(41,98,255,0.06), inset 0 1px 0 rgba(255,255,255,0.04)",
           }}
         >
-          <div className="flex items-center justify-around px-1 py-1.5">
+          <div className="flex items-center justify-around px-0.5 py-1.5">
             {TABS.map(tab => {
               const isActive =
                 location === tab.path ||
@@ -38,10 +39,10 @@ export function MobileNav() {
                 <Link
                   key={tab.path}
                   href={tab.path}
-                  className="flex flex-col items-center gap-0.5 relative select-none"
-                  style={{ minWidth: 42 }}
+                  className="flex flex-col items-center gap-0.5 relative select-none flex-1"
+                  style={{ minWidth: 0 }}
                 >
-                  <div className="relative flex items-center justify-center" style={{ width: 40, height: 32 }}>
+                  <div className="relative flex items-center justify-center" style={{ width: 34, height: 30 }}>
                     {isActive && (
                       <motion.div
                         layoutId="mobile-nav-active"
