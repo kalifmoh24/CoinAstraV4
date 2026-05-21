@@ -31,6 +31,12 @@ const inflight = new Map<string, Promise<unknown>>();
 
 const CACHE_FILE = process.env["COINGECKO_CACHE_FILE"] ?? "/tmp/coinastra-cg-cache.json";
 
+interface FetchResponseLike {
+  ok: boolean;
+  status: number;
+  json<T = unknown>(): Promise<T>;
+}
+
 function loadDiskCache(): void {
   try {
     if (!existsSync(CACHE_FILE)) return;
@@ -108,7 +114,7 @@ async function doFetchJson(url: string): Promise<unknown> {
         "Accept": "application/json",
         "User-Agent": "CoinAstra/1.0",
       },
-    });
+    }) as unknown as FetchResponseLike;
     if (!r.ok) throw new Error(`upstream ${r.status} ${url}`);
     return await r.json();
   } finally {

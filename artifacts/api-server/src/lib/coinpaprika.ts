@@ -15,6 +15,12 @@ import type { CoinMarket, GlobalData } from "./coingecko.js";
 
 const CP_BASE = "https://api.coinpaprika.com/v1";
 
+interface FetchResponseLike {
+  ok: boolean;
+  status: number;
+  json<T = unknown>(): Promise<T>;
+}
+
 interface CpTicker {
   id: string;            // "btc-bitcoin"
   name: string;          // "Bitcoin"
@@ -126,7 +132,7 @@ export async function getAllCoinsFromPaprika(): Promise<CoinMarket[]> {
     try {
       const r = await fetch(`${CP_BASE}/tickers`, {
         headers: { "Accept": "application/json", "User-Agent": "CoinAstra/1.0" },
-      });
+      }) as unknown as FetchResponseLike;
       if (!r.ok) throw new Error(`coinpaprika ${r.status}`);
       const raw = (await r.json()) as CpTicker[];
       const normalised = raw
@@ -243,7 +249,7 @@ export async function getPaprikaGlobal(): Promise<GlobalData> {
     const r = await fetch(`${CP_BASE}/global`, {
       signal: ac.signal,
       headers: { "Accept": "application/json", "User-Agent": "CoinAstra/1.0" },
-    });
+    }) as unknown as FetchResponseLike;
     if (!r.ok) throw new Error(`coinpaprika global ${r.status}`);
     const g = (await r.json()) as CpGlobal;
     const normalised: GlobalData = {
