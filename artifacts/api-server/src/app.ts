@@ -5,7 +5,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { startBackgroundRefresh } from "./lib/coingecko";
 import { corsOptions } from "./config/cors";
-import { globalLimiter } from "./middleware/rateLimiter";
+import { apiLimiter } from "./middleware/rateLimiter";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
 const app: Express = express();
@@ -33,7 +33,7 @@ app.use(
 );
 
 app.use(cors(corsOptions));
-app.use(globalLimiter);
+app.use(apiLimiter);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
