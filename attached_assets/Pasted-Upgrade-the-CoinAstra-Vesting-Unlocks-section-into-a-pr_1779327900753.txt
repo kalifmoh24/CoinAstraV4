@@ -1,0 +1,213 @@
+Upgrade the CoinAstra “Vesting” / “Unlocks” section into a professional institutional-grade Token Unlock Intelligence platform.
+
+Main Goal:
+Make CoinAstra one of the deepest crypto vesting and unlock tracking systems in the market.
+
+Requirements:
+
+1. Add advanced vesting dashboard UI.
+- premium dark design
+- glassmorphism cards
+- animated charts
+- professional analytics layout
+- mobile + desktop optimized
+
+2. Load ALL major crypto unlocks dynamically.
+Track:
+- upcoming unlocks
+- past unlocks
+- cliff unlocks
+- linear vesting
+- investor unlocks
+- team unlocks
+- ecosystem unlocks
+- advisor unlocks
+- treasury unlocks
+- staking unlocks
+
+3. Each token unlock card must include:
+- token logo
+- token name
+- ticker
+- current price
+- market cap
+- FDV
+- circulating supply
+- total supply
+- unlocked percentage
+- locked percentage
+- next unlock date/time
+- unlock countdown timer
+- unlock amount
+- unlock USD value
+- unlock impact score
+- inflation risk
+- dilution risk
+- historical unlock performance
+- vesting progress bar
+
+4. Add unlock impact levels:
+- Extreme Dilution
+- High Dilution
+- Medium Dilution
+- Low Dilution
+
+5. Add AI unlock analysis:
+- expected market impact
+- likely sell pressure
+- whale distribution risk
+- bullish/bearish probability
+- historical similar unlock reactions
+- volatility expectation
+- smart money positioning
+
+6. When clicking a coin:
+Open a FULL professional unlock intelligence page with:
+
+HEADER:
+- large token banner
+- live price
+- market stats
+- unlock status
+
+SECTIONS:
+A. Upcoming Unlocks
+- exact dates
+- exact times
+- countdowns
+- unlocked amount
+- receiver categories
+
+B. Past Unlock History
+- every previous unlock
+- unlock performance
+- price reaction after unlock
+- historical charts
+
+C. Vesting Allocation Breakdown
+- team %
+- investors %
+- advisors %
+- ecosystem %
+- treasury %
+- staking %
+- liquidity %
+- public sale %
+
+D. Supply Analytics
+- circulating vs locked
+- inflation curve
+- future dilution model
+- emission schedule
+
+E. AI Intelligence
+- unlock danger score
+- market reaction probability
+- smart money analysis
+- whale positioning
+- AI outlook
+
+F. Interactive Charts
+- unlock timeline chart
+- future supply expansion chart
+- token inflation chart
+- market cap vs FDV chart
+
+G. Tokenomics Intelligence
+- vesting structure quality
+- decentralization score
+- investor concentration
+- unlock sustainability
+
+7. Add filters:
+- unlock date
+- impact level
+- market cap
+- category
+- blockchain
+- unlock size
+- dilution risk
+- AI score
+
+8. Add tabs:
+- Today
+- 7 Days
+- 30 Days
+- Upcoming
+- Large Unlocks
+- High Risk
+- Completed
+- Historical
+
+9. Add live updating system.
+- refresh every 30 seconds
+- websocket architecture ready
+- real-time countdowns
+
+10. Add huge analytics widgets:
+- total unlocks this week
+- largest unlock today
+- highest dilution risk
+- biggest upcoming cliff
+- market unlock calendar
+- unlock heatmap
+
+11. Add search:
+- token search
+- narrative search
+- blockchain search
+
+12. Add performance optimizations:
+- virtualization
+- lazy loading
+- background sync
+- local caching
+- skeleton loaders
+- no UI freezing
+
+13. Add premium animations:
+- smooth hover effects
+- animated counters
+- live countdown animations
+- chart transitions
+
+14. Add “Smart Alerts”
+- notify before major unlocks
+- whale unlock alerts
+- high dilution alerts
+
+15. Add advanced tokenomics scoring system:
+- token health score
+- dilution score
+- investor pressure score
+- sustainability score
+
+16. Make the unlock section feel larger and more advanced than:
+- TokenUnlocks
+- CoinMarketCap unlocks
+- CryptoRank unlocks
+
+17. Use scalable architecture:
+- websocket support
+- AI recommendations
+- push notifications
+- personalization
+- future AI forecasting
+
+18. Ensure all unlock data loads smoothly with zero broken states.
+Always show:
+- skeletons
+- fallback states
+- cached data
+- retry handling
+
+19. Add “Market Unlock Calendar” view.
+- daily
+- weekly
+- monthly
+- timeline visualization
+
+20. Add “AI Detected High Risk Unlocks” section at top.
+
+Goal:
+Make CoinAstra Vesting/Unlocks become a complete crypto tokenomics intelligence terminal.

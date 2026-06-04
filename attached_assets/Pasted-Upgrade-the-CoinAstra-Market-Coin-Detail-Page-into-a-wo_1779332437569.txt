@@ -1,0 +1,346 @@
+Upgrade the CoinAstra Market Coin Detail Page into a world-class institutional crypto intelligence terminal.
+
+When a user clicks ANY coin from:
+- Markets
+- Heatmap
+- Trending
+- Watchlist
+- AI Signals
+- Search
+- Gainers/Losers
+- Categories
+
+Open a FULL premium Coin Intelligence page.
+
+========================================
+PAGE OPEN EXPERIENCE
+========================================
+
+1. Smooth animated transition from coin card.
+2. Premium loading skeletons.
+3. Instant cached preview while fresh data loads.
+4. No blank screens.
+5. Mobile-first responsive layout.
+6. Ultra smooth scrolling.
+
+URL structure:
+- /coin/bitcoin
+- /coin/ethereum
+- /coin/solana
+
+========================================
+TOP HERO SECTION
+========================================
+
+Show immediately:
+
+- coin logo
+- coin name
+- ticker
+- rank
+- live price
+- 24h %
+- market cap
+- FDV
+- circulating supply
+- max supply
+- total supply
+- volume 24h
+- liquidity score
+- trust score
+- exchange count
+- chain/network
+- category/tags
+
+Add:
+- favorite/watchlist button
+- share button
+- alerts button
+- AI score badge
+- bullish/bearish sentiment badge
+
+========================================
+LIVE PRICE AREA
+========================================
+
+Large TradingView-style section:
+
+Show:
+- live chart
+- candlestick mode
+- depth chart
+- volume chart
+- order flow
+- timeframe selector
+
+Timeframes:
+- 1m
+- 5m
+- 15m
+- 1h
+- 4h
+- 1D
+- 1W
+- 1M
+- YTD
+- ALL
+
+Chart tools:
+- indicators
+- drawing tools
+- RSI
+- MACD
+- EMA
+- Bollinger Bands
+- Fibonacci
+- trend lines
+
+========================================
+KEY MARKET DATA
+========================================
+
+Show:
+
+- ATH
+- ATL
+- ATH date
+- ATL date
+- ATH distance %
+- volatility
+- beta
+- liquidity
+- spread
+- dominance
+- market sentiment
+- funding rates
+- open interest
+- long/short ratio
+
+========================================
+AI MARKET INTELLIGENCE
+========================================
+
+Massive AI section:
+
+Show:
+- AI market outlook
+- bullish probability
+- bearish probability
+- trend strength
+- smart money activity
+- whale accumulation
+- liquidation risk
+- breakout probability
+- momentum score
+- confidence score
+
+AI analysis:
+- likely next move
+- support levels
+- resistance levels
+- trend analysis
+- volatility expectation
+- historical pattern similarity
+
+========================================
+ON-CHAIN ANALYTICS
+========================================
+
+Show:
+- active wallets
+- transaction count
+- whale transfers
+- exchange inflows
+- exchange outflows
+- smart money wallets
+- staking ratio
+- token holder growth
+- gas usage
+- developer activity
+
+========================================
+MARKET SENTIMENT
+========================================
+
+Show:
+- Twitter/X sentiment
+- Reddit sentiment
+- Fear & Greed
+- social volume
+- influencer mentions
+- trending narratives
+- CT trends
+- news sentiment
+
+========================================
+NEWS & EVENTS SECTION
+========================================
+
+Show:
+- latest news
+- regulation news
+- ETF news
+- ecosystem updates
+- partnerships
+- exchange listings
+- unlocks
+- hacks/security alerts
+
+Each news card:
+- impact score
+- sentiment
+- AI summary
+- affected coins
+- market impact probability
+
+========================================
+TOKENOMICS SECTION
+========================================
+
+Show:
+- supply breakdown
+- vesting
+- unlock schedule
+- burn mechanism
+- inflation rate
+- staking rewards
+- treasury allocation
+- holder distribution
+
+========================================
+EXCHANGE DATA
+========================================
+
+Show:
+- all exchanges
+- trading pairs
+- liquidity
+- volume
+- spread
+- trust score
+
+Add:
+- arbitrage opportunities
+- best exchange pricing
+
+========================================
+WHALE TRACKER
+========================================
+
+Show:
+- recent whale transactions
+- exchange whale flows
+- wallet tracking
+- accumulation/distribution
+
+========================================
+AI SIGNALS PANEL
+========================================
+
+Show:
+- buy/sell signals
+- momentum alerts
+- breakout alerts
+- trend reversals
+- AI confidence
+
+========================================
+RELATED COINS
+========================================
+
+Show similar coins based on:
+- sector
+- blockchain
+- narrative
+- AI similarity
+- market cap
+- ecosystem
+
+========================================
+ADVANCED FEATURES
+========================================
+
+1. Real-time updates
+2. Websocket architecture
+3. Auto refresh every 30s
+4. Infinite smooth loading
+5. Local cache
+6. Skeleton loaders
+7. Offline fallback states
+8. Mobile gestures
+9. Desktop analytics layout
+10. Multi-tab architecture
+
+========================================
+TOP ACTION BUTTONS
+========================================
+
+Buttons:
+- Buy
+- Trade
+- Add Alert
+- Add Watchlist
+- Compare
+- AI Analysis
+- Portfolio Add
+- Whale Alerts
+
+========================================
+VISUAL DESIGN
+========================================
+
+Use:
+- premium dark UI
+- neon accents
+- glassmorphism
+- animated gradients
+- professional charts
+- modern exchange-style layout
+
+Make it feel better than:
+- CoinMarketCap
+- CoinGecko
+- TradingView
+- Messari
+- Arkham
+- DexScreener
+
+========================================
+PERFORMANCE
+========================================
+
+Must support:
+- 20k+ coins
+- virtualization
+- lazy loading
+- background sync
+- cached data
+- zero UI freezes
+
+Always show:
+- fallback data
+- skeleton states
+- retry states
+- smooth transitions
+
+========================================
+GOAL
+========================================
+
+Every coin click should open a complete professional crypto intelligence terminal with:
+- market analytics
+- AI analysis
+- whale tracking
+- on-chain analytics
+- tokenomics
+- news intelligence
+- trading data
+- sentiment analysis
+- live charts
+- smart alerts
+
+
+
+all the updates publish to the website directly
+
+and also the wbsite logo must be apperred when downloaded the icon
